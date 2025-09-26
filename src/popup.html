@@ -14,9 +14,39 @@
         .header {
             display: flex;
             align-items: center;
+            justify-content: space-between;
             margin-bottom: 16px;
             border-bottom: 1px solid #e0e0e0;
             padding-bottom: 12px;
+        }
+        
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .icon-btn {
+            background: transparent !important;
+            border: 1px solid #e0e0e0 !important;
+            color: #666 !important;
+            padding: 4px 6px !important;
+            margin: 0 !important;
+            font-size: 14px !important;
+            border-radius: 4px !important;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .icon-btn:hover {
+            background: #f5f5f5 !important;
+            border-color: #ccc !important;
+        }
+        
+        .icon-btn.active {
+            background: #2196F3 !important;
+            border-color: #1976D2 !important;
+            color: white !important;
         }
         
         .logo {
@@ -365,12 +395,216 @@
         .install-btn:hover {
             background: #45a049 !important;
         }
+        
+        /* Tags Section Styles */
+        .tags-section {
+            margin-top: 16px;
+            border-top: 1px solid #e0e0e0;
+            padding-top: 12px;
+        }
+        
+        .tags-section h3 {
+            margin: 0 0 8px 0;
+            font-size: 14px;
+            color: #333;
+        }
+        
+        .tag-controls {
+            margin-bottom: 12px;
+        }
+        
+        .tag-filter-controls {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 8px;
+            flex-wrap: wrap;
+        }
+        
+        .filter-btn {
+            background: #f5f5f5 !important;
+            color: #666 !important;
+            border: 1px solid #ddd !important;
+            padding: 4px 8px !important;
+            font-size: 11px !important;
+            margin: 0 !important;
+            border-radius: 12px !important;
+        }
+        
+        .filter-btn.active {
+            background: #2196F3 !important;
+            color: white !important;
+            border-color: #1976D2 !important;
+        }
+        
+        .filter-btn:hover {
+            background: #e0e0e0 !important;
+        }
+        
+        .filter-btn.active:hover {
+            background: #1976D2 !important;
+        }
+        
+        .tag-action-controls {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .tags-display {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        .tags-display h4 {
+            margin: 8px 0 4px 0;
+            font-size: 12px;
+            color: #555;
+            font-weight: bold;
+        }
+        
+        .tag-pills {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            margin-bottom: 12px;
+        }
+        
+        .tag-pill {
+            background: #e3f2fd;
+            color: #1976d2;
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-size: 10px;
+            cursor: pointer;
+            border: 1px solid #bbdefb;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        
+        .tag-pill:hover {
+            background: #bbdefb;
+            border-color: #90caf9;
+        }
+        
+        .tag-pill.frequent {
+            background: #e8f5e8;
+            color: #2e7d32;
+            border-color: #c8e6c9;
+        }
+        
+        .tag-pill.frequent:hover {
+            background: #c8e6c9;
+            border-color: #a5d6a7;
+        }
+        
+        .tag-pill.high-priority {
+            background: #ffebee;
+            color: #c62828;
+            border-color: #ffcdd2;
+        }
+        
+        .tag-pill.high-priority:hover {
+            background: #ffcdd2;
+            border-color: #ef9a9a;
+        }
+        
+        .tag-frequency {
+            font-size: 9px;
+            opacity: 0.8;
+        }
+        
+        .tab-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 2px;
+            margin-top: 4px;
+        }
+        
+        .tab-tag {
+            background: #f5f5f5;
+            color: #666;
+            padding: 1px 4px;
+            border-radius: 6px;
+            font-size: 9px;
+            border: 1px solid #e0e0e0;
+        }
+        
+        .group-suggestions {
+            margin-top: 8px;
+        }
+        
+        .group-suggestion {
+            background: #fff3e0;
+            border: 1px solid #ffcc02;
+            border-radius: 4px;
+            padding: 8px;
+            margin-bottom: 4px;
+            font-size: 11px;
+        }
+        
+        .group-suggestion-header {
+            font-weight: bold;
+            color: #e65100;
+            margin-bottom: 2px;
+        }
+        
+        .group-suggestion-reason {
+            color: #bf360c;
+            font-size: 10px;
+            margin-bottom: 4px;
+        }
+        
+        .group-suggestion-actions {
+            display: flex;
+            gap: 4px;
+        }
+        
+        .create-group-btn {
+            background: #ff9800 !important;
+            color: white !important;
+            padding: 2px 6px !important;
+            font-size: 9px !important;
+        }
+        
+        .create-group-btn:hover {
+            background: #f57c00 !important;
+        }
+        
+        .dismiss-suggestion-btn {
+            background: #f5f5f5 !important;
+            color: #666 !important;
+            padding: 2px 6px !important;
+            font-size: 9px !important;
+        }
+        
+        .dismiss-suggestion-btn:hover {
+            background: #e0e0e0 !important;
+        }
+        
+        /* Enhanced tab item styles for tags */
+        .tab-item.has-tags {
+            border-left: 3px solid #2196F3;
+        }
+        
+        .tab-item.frequent-tag {
+            border-left: 3px solid #4CAF50;
+        }
+        
+        .tab-item.high-priority-tag {
+            border-left: 3px solid #f44336;
+        }
     </style>
 </head>
 <body>
     <div class="header">
         <div class="logo"></div>
         <h1>FastBrowse</h1>
+        <div class="header-controls">
+            <button id="toggle-tags" class="icon-btn" title="Toggle Tag Management" style="display: none;">
+                🏷️
+            </button>
+        </div>
     </div>
     
     <div class="memory-info">
@@ -404,6 +638,38 @@
     
     <div class="tab-list" id="tab-list">
         <!-- Tab items will be populated here -->
+    </div>
+    
+    <div class="tags-section" id="tags-section" style="display: none;">
+        <h3>🏷️ Tag Management</h3>
+        <div class="tag-controls">
+            <div class="tag-filter-controls">
+                <button id="show-all-tabs" class="filter-btn active">All</button>
+                <button id="show-frequent-tags" class="filter-btn">Frequent</button>
+                <button id="show-active-tags" class="filter-btn">Active</button>
+                <select id="tag-filter-select" style="display: none;">
+                    <option value="">Filter by tag...</option>
+                </select>
+            </div>
+            <div class="tag-action-controls">
+                <button id="auto-group-tabs" class="secondary">Auto-Group</button>
+                <button id="close-tags" class="secondary">Close</button>
+            </div>
+        </div>
+        <div class="tags-display" id="tags-display" style="display: block;">
+            <div class="frequent-tags">
+                <h4>Frequent Tags</h4>
+                <div class="tag-pills" id="frequent-tag-pills"></div>
+            </div>
+            <div class="active-tags">
+                <h4>Active Tags</h4>
+                <div class="tag-pills" id="active-tag-pills"></div>
+            </div>
+            <div class="group-suggestions">
+                <h4>Group Suggestions</h4>
+                <div id="group-suggestions"></div>
+            </div>
+        </div>
     </div>
     
     <div class="extension-section">

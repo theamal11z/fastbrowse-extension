@@ -31,6 +31,20 @@ class OptionsManager {
             focusExtensionRecommendations: document.getElementById('focus-extension-recommendations'),
             focusTotalTime: document.getElementById('focus-total-time'),
             focusTotalTabs: document.getElementById('focus-total-tabs'),
+            // Tag management elements
+            tagsEnabled: document.getElementById('tags-enabled'),
+            autoTagging: document.getElementById('auto-tagging'),
+            tagFrequencyThreshold: document.getElementById('tag-frequency-threshold'),
+            tagFrequencyThresholdValue: document.getElementById('tag-frequency-threshold-value'),
+            tagBasedSuspension: document.getElementById('tag-based-suspension'),
+            tagSuggestions: document.getElementById('tag-suggestions'),
+            maxTagsPerTab: document.getElementById('max-tags-per-tab'),
+            maxTagsPerTabValue: document.getElementById('max-tags-per-tab-value'),
+            tagInactivityDays: document.getElementById('tag-inactivity-days'),
+            tagInactivityDaysValue: document.getElementById('tag-inactivity-days-value'),
+            totalTagsCount: document.getElementById('total-tags-count'),
+            frequentTagsCount: document.getElementById('frequent-tags-count'),
+            taggedTabsCount: document.getElementById('tagged-tabs-count'),
             saveButton: document.getElementById('save'),
             saveStatus: document.getElementById('save-status')
         };
@@ -41,6 +55,7 @@ class OptionsManager {
     async init() {
         await this.loadSettings();
         await this.loadFocusStats();
+        await this.loadTagStats();
         this.setupEventListeners();
     }
     
@@ -56,6 +71,19 @@ class OptionsManager {
         
         this.elements.extensionMemoryThreshold.addEventListener('input', () => {
             this.elements.extensionMemoryThresholdValue.textContent = this.elements.extensionMemoryThreshold.value;
+        });
+        
+        // Tag management range updates
+        this.elements.tagFrequencyThreshold.addEventListener('input', () => {
+            this.elements.tagFrequencyThresholdValue.textContent = this.elements.tagFrequencyThreshold.value;
+        });
+        
+        this.elements.maxTagsPerTab.addEventListener('input', () => {
+            this.elements.maxTagsPerTabValue.textContent = this.elements.maxTagsPerTab.value;
+        });
+        
+        this.elements.tagInactivityDays.addEventListener('input', () => {
+            this.elements.tagInactivityDaysValue.textContent = this.elements.tagInactivityDays.value;
         });
         
         // Save button
@@ -82,6 +110,19 @@ class OptionsManager {
         });
         
         this.elements.extensionMemoryThreshold.addEventListener('change', () => {
+            this.saveSettings();
+        });
+        
+        // Tag management range change listeners
+        this.elements.tagFrequencyThreshold.addEventListener('change', () => {
+            this.saveSettings();
+        });
+        
+        this.elements.maxTagsPerTab.addEventListener('change', () => {
+            this.saveSettings();
+        });
+        
+        this.elements.tagInactivityDays.addEventListener('change', () => {
             this.saveSettings();
         });
     }
@@ -121,6 +162,18 @@ class OptionsManager {
                 this.elements.focusMemoryOptimization.checked = settings.focusMemoryOptimization;
                 this.elements.focusExtensionRecommendations.checked = settings.focusExtensionRecommendations;
                 
+                // Tag management settings
+                this.elements.tagsEnabled.checked = settings.tagsEnabled;
+                this.elements.autoTagging.checked = settings.autoTagging;
+                this.elements.tagFrequencyThreshold.value = Math.round(settings.tagFrequencyThreshold * 100);
+                this.elements.tagFrequencyThresholdValue.textContent = Math.round(settings.tagFrequencyThreshold * 100);
+                this.elements.tagBasedSuspension.checked = settings.tagBasedSuspension;
+                this.elements.tagSuggestions.checked = settings.tagSuggestions;
+                this.elements.maxTagsPerTab.value = settings.maxTagsPerTab;
+                this.elements.maxTagsPerTabValue.textContent = settings.maxTagsPerTab;
+                this.elements.tagInactivityDays.value = settings.tagInactivityDays;
+                this.elements.tagInactivityDaysValue.textContent = settings.tagInactivityDays;
+                
                 console.log('Settings loaded successfully');
             }
         } catch (error) {
@@ -153,7 +206,15 @@ class OptionsManager {
                 focusRemoveDistractions: this.elements.focusRemoveDistractions.checked,
                 focusDisableAnimations: this.elements.focusDisableAnimations.checked,
                 focusMemoryOptimization: this.elements.focusMemoryOptimization.checked,
-                focusExtensionRecommendations: this.elements.focusExtensionRecommendations.checked
+                focusExtensionRecommendations: this.elements.focusExtensionRecommendations.checked,
+                // Tag management settings
+                tagsEnabled: this.elements.tagsEnabled.checked,
+                autoTagging: this.elements.autoTagging.checked,
+                tagFrequencyThreshold: parseInt(this.elements.tagFrequencyThreshold.value) / 100,
+                tagBasedSuspension: this.elements.tagBasedSuspension.checked,
+                tagSuggestions: this.elements.tagSuggestions.checked,
+                maxTagsPerTab: parseInt(this.elements.maxTagsPerTab.value),
+                tagInactivityDays: parseInt(this.elements.tagInactivityDays.value)
             };
             
             const response = await this.sendMessage({ 
@@ -212,6 +273,40 @@ class OptionsManager {
             console.error('Failed to load focus stats:', error);
             this.elements.focusTotalTime.textContent = 'Unavailable';
             this.elements.focusTotalTabs.textContent = 'Unavailable';
+        }
+    }
+    
+    async loadTagStats() {
+        try {
+            // Load all tags
+            const allTagsResponse = await this.sendMessage({ action: 'getAllTags' });
+            const frequentTagsResponse = await this.sendMessage({ action: 'getFrequentTags' });
+            
+            // Count tags
+            const totalTags = allTagsResponse.success ? allTagsResponse.data.length : 0;
+            const frequentTags = frequentTagsResponse.success ? frequentTagsResponse.data.length : 0;
+            
+            // Count tagged tabs
+            let taggedTabsCount = 0;
+            if (allTagsResponse.success) {
+                const tabsResponse = await this.sendMessage({ action: 'getAllTabs' });
+                if (tabsResponse.success) {
+                    taggedTabsCount = tabsResponse.data.filter(tab => 
+                        tab.tags && tab.tags.length > 0
+                    ).length;
+                }
+            }
+            
+            // Update UI
+            this.elements.totalTagsCount.textContent = totalTags;
+            this.elements.frequentTagsCount.textContent = frequentTags;
+            this.elements.taggedTabsCount.textContent = taggedTabsCount;
+            
+        } catch (error) {
+            console.error('Failed to load tag stats:', error);
+            this.elements.totalTagsCount.textContent = 'Error';
+            this.elements.frequentTagsCount.textContent = 'Error';
+            this.elements.taggedTabsCount.textContent = 'Error';
         }
     }
     

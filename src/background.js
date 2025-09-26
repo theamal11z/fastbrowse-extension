@@ -18,14 +18,22 @@ class FastBrowse {
             extensionMemoryThreshold: 50, // MB
             extensionSuggestions: true,
             extensionNotifications: true,
-            // Focus mode settings
+        // Focus mode settings
             focusMode: false,
             focusAutoSuspend: true, // Auto-suspend tabs in focus mode
             focusMinimalTheme: true,
             focusRemoveDistractions: true,
             focusDisableAnimations: true,
             focusMemoryOptimization: true,
-            focusExtensionRecommendations: true
+            focusExtensionRecommendations: true,
+            // Tag management settings
+            tagsEnabled: true,
+            autoTagging: true,
+            tagFrequencyThreshold: 0.3, // 0-1 scale for frequent tag classification
+            tagBasedSuspension: true,
+            tagSuggestions: true,
+            maxTagsPerTab: 5,
+            tagInactivityDays: 30 // Days before a tag is considered inactive
         };
         
         this.suspendedTabs = new Map();
@@ -44,6 +52,19 @@ class FastBrowse {
             distractionsRemoved: 0,
             timeActive: 0
         };
+        
+        // Tag management data structures
+        this.tags = new Map(); // tagId -> tag object
+        this.tabTags = new Map(); // tabId -> Set of tagIds
+        this.tagGroups = new Map(); // groupId -> group object
+        this.tagUsageHistory = new Map(); // tagId -> usage history
+        this.domainTagSuggestions = new Map(); // domain -> suggested tags
+        this.lastTagCleanup = 0;
+        
+        // Notification state management
+        this.activeNotifications = new Set();
+        this.notificationCooldowns = new Map();
+        this.lastNotificationTime = new Map();
         
         // Recommended focus extensions database
         this.recommendedFocusExtensions = new Map([
@@ -113,6 +134,9 @@ class FastBrowse {
         // Start extension monitoring
         this.startExtensionMonitoring();
         
+        // Initialize tag system
+        await this.initializeTagSystem();
+        
         console.log('FastBrowse initialized');
     }
     
@@ -126,6 +150,20 @@ class FastBrowse {
     }
     
     setupEventListeners() {
+        // Listen for notification clicks
+        chrome.notifications.onClicked.addListener((notificationId) => {
+            this.handleNotificationClick(notificationId);
+        });
+        
+        // Listen for notification button clicks
+        chrome.notifications.onButtonClicked.addListener((notificationId, buttonIndex) => {
+            this.handleNotificationButtonClick(notificationId, buttonIndex);
+        });
+        
+        // Clean up closed notifications
+        chrome.notifications.onClosed.addListener((notificationId, byUser) => {
+            this.activeNotifications.delete(notificationId);
+        });
         // Listen for tab activation changes
         chrome.tabs.onActivated.addListener((activeInfo) => {
             this.onTabActivated(activeInfo);
@@ -151,6 +189,30 @@ class FastBrowse {
             this.handleMessage(request, sender, sendResponse);
             return true; // Keep message channel open for async response
         });
+        
+        // Listen for keyboard shortcuts
+        chrome.commands.onCommand.addListener((command) => {
+            this.handleCommand(command);
+        });
+        
+        // Setup context menus
+        this.setupContextMenus();
+    }
+    
+    // Notification event handlers
+    handleNotificationClick(notificationId) {
+        // Clear the notification when clicked
+        chrome.notifications.clear(notificationId);
+        this.activeNotifications.delete(notificationId);
+    }
+    
+    handleNotificationButtonClick(notificationId, buttonIndex) {
+        // Handle button clicks for notifications that have buttons
+        chrome.notifications.clear(notificationId);
+        this.activeNotifications.delete(notificationId);
+        
+        // You can add specific handling for different notification types here
+        console.log(`Notification button ${buttonIndex} clicked for ${notificationId}`);
     }
     
     async onTabActivated(activeInfo) {
@@ -162,6 +224,20 @@ class FastBrowse {
         // Restore tab if it's suspended
         if (this.suspendedTabs.has(activeInfo.tabId)) {
             await this.restoreTab(activeInfo.tabId);
+        }
+        
+        // Update tag usage for activated tab
+        if (this.settings.tagsEnabled) {
+            await this.updateTabTagUsage(activeInfo.tabId);
+            
+            // Auto-suggest tags if enabled and tab has no tags
+            if (this.settings.autoTagging && !this.tabTags.has(activeInfo.tabId)) {
+                const suggestedTags = await this.suggestTagsForTab(tab);
+                if (suggestedTags.length > 0) {
+                    // Automatically apply first suggestion if confidence is high
+                    await this.assignTagToTab(activeInfo.tabId, suggestedTags[0]);
+                }
+            }
         }
         
         // Start timers for other tabs in the window
@@ -185,6 +261,15 @@ class FastBrowse {
     onTabRemoved(tabId) {
         this.clearTabTimer(tabId);
         this.suspendedTabs.delete(tabId);
+        
+        // Clean up tag associations
+        if (this.settings.tagsEnabled && this.tabTags.has(tabId)) {
+            this.tabTags.delete(tabId);
+            // Save tag data asynchronously
+            this.saveTagData().catch(error => {
+                console.error('Failed to save tag data after tab removal:', error);
+            });
+        }
     }
     
     async onWindowFocusChanged(windowId) {
@@ -475,6 +560,28 @@ class FastBrowse {
             return true;
         }
         
+        // Tag-based protection
+        if (this.settings.tagsEnabled && this.settings.tagBasedSuspension) {
+            const tabTags = this.getTabTags(tab.id);
+            
+            for (const tag of tabTags) {
+                // Protect high priority tags
+                if (tag.priority === 'high') {
+                    return true;
+                }
+                
+                // Protect frequently used tags
+                if (tag.frequency >= this.settings.tagFrequencyThreshold) {
+                    return true;
+                }
+                
+                // Protect tags marked as no auto-suspend
+                if (!tag.autoSuspend) {
+                    return true;
+                }
+            }
+        }
+        
         return false;
     }
     
@@ -567,6 +674,24 @@ class FastBrowse {
     
     showNotification(message, options = {}) {
         try {
+            // Create a unique key for this notification type
+            const notificationKey = `${message.substring(0, 30)}_${options.type || 'basic'}`;
+            
+            // Check for cooldown - don't show same notification within 30 seconds
+            const now = Date.now();
+            const cooldownTime = 30000; // 30 seconds
+            
+            if (this.notificationCooldowns.has(notificationKey)) {
+                const lastShown = this.notificationCooldowns.get(notificationKey);
+                if (now - lastShown < cooldownTime) {
+                    console.debug(`Notification "${message}" suppressed due to cooldown`);
+                    return;
+                }
+            }
+            
+            // Set cooldown
+            this.notificationCooldowns.set(notificationKey, now);
+            
             const notificationOptions = {
                 type: 'basic',
                 iconUrl: chrome.runtime.getURL('assets/icon48.png'),
@@ -588,6 +713,16 @@ class FastBrowse {
                     console.debug('Notification error:', chrome.runtime.lastError);
                 } else {
                     console.log('Notification created:', notificationId);
+                    this.activeNotifications.add(notificationId);
+                    
+                    // Auto-clear notification after 5 seconds if not requiring interaction
+                    if (!options.requireInteraction) {
+                        setTimeout(() => {
+                            chrome.notifications.clear(notificationId, () => {
+                                this.activeNotifications.delete(notificationId);
+                            });
+                        }, 5000);
+                    }
                 }
             });
         } catch (error) {
@@ -601,6 +736,830 @@ class FastBrowse {
         const title = tab.title || 'Unknown';
         const url = tab.url || 'no URL';
         return `${title} (${url})`;
+    }
+    
+    // ============================================================================
+    // TAG MANAGEMENT SYSTEM
+    // ============================================================================
+    
+    async initializeTagSystem() {
+        if (!this.settings.tagsEnabled) return;
+        
+        try {
+            // Load tag data from storage
+            const tagData = await chrome.storage.local.get([
+                'fastbrowse_tags',
+                'fastbrowse_tab_tags', 
+                'fastbrowse_tag_groups',
+                'fastbrowse_tag_usage',
+                'fastbrowse_domain_suggestions'
+            ]);
+            
+            // Initialize tags
+            if (tagData.fastbrowse_tags) {
+                this.tags = new Map(Object.entries(tagData.fastbrowse_tags));
+            }
+            
+            // Initialize tab-tag associations
+            if (tagData.fastbrowse_tab_tags) {
+                this.tabTags = new Map();
+                for (const [tabId, tagIds] of Object.entries(tagData.fastbrowse_tab_tags)) {
+                    this.tabTags.set(parseInt(tabId), new Set(tagIds));
+                }
+            }
+            
+            // Initialize tag groups
+            if (tagData.fastbrowse_tag_groups) {
+                this.tagGroups = new Map(Object.entries(tagData.fastbrowse_tag_groups));
+            }
+            
+            // Initialize usage history
+            if (tagData.fastbrowse_tag_usage) {
+                this.tagUsageHistory = new Map(Object.entries(tagData.fastbrowse_tag_usage));
+            }
+            
+            // Initialize domain suggestions
+            if (tagData.fastbrowse_domain_suggestions) {
+                this.domainTagSuggestions = new Map(Object.entries(tagData.fastbrowse_domain_suggestions));
+            }
+            
+            // Create default domain-based tag suggestions
+            await this.initializeDefaultTagSuggestions();
+            
+        // Start tag cleanup scheduler
+        this.scheduleTagCleanup();
+        
+        // Start notification cooldown cleanup
+        this.scheduleNotificationCleanup();
+            
+            console.log('Tag system initialized', {
+                tags: this.tags.size,
+                tabTags: this.tabTags.size,
+                groups: this.tagGroups.size
+            });
+            
+        } catch (error) {
+            console.error('Failed to initialize tag system:', error);
+        }
+    }
+    
+    async initializeDefaultTagSuggestions() {
+        const defaultSuggestions = {
+            // Work & Productivity
+            'github.com': ['Development', 'Work', 'Code'],
+            'stackoverflow.com': ['Development', 'Help', 'Code'],
+            'docs.google.com': ['Work', 'Documents', 'Productivity'],
+            'gmail.com': ['Work', 'Email', 'Communication'],
+            'calendar.google.com': ['Work', 'Productivity', 'Schedule'],
+            'trello.com': ['Work', 'Productivity', 'Project Management'],
+            'slack.com': ['Work', 'Communication', 'Team'],
+            'zoom.us': ['Work', 'Communication', 'Meeting'],
+            'linkedin.com': ['Work', 'Professional', 'Network'],
+            
+            // Social & Entertainment
+            'facebook.com': ['Social Media', 'Entertainment', 'Personal'],
+            'twitter.com': ['Social Media', 'News', 'Entertainment'],
+            'instagram.com': ['Social Media', 'Entertainment', 'Personal'],
+            'youtube.com': ['Entertainment', 'Video', 'Learning'],
+            'reddit.com': ['Social Media', 'Entertainment', 'News'],
+            'tiktok.com': ['Social Media', 'Entertainment', 'Video'],
+            
+            // Learning & Research
+            'wikipedia.org': ['Research', 'Learning', 'Reference'],
+            'coursera.org': ['Learning', 'Education', 'Course'],
+            'udemy.com': ['Learning', 'Education', 'Course'],
+            'medium.com': ['Learning', 'Reading', 'Articles'],
+            'arxiv.org': ['Research', 'Academic', 'Papers'],
+            
+            // Shopping & Finance
+            'amazon.com': ['Shopping', 'Personal', 'E-commerce'],
+            'ebay.com': ['Shopping', 'Personal', 'E-commerce'],
+            'paypal.com': ['Finance', 'Personal', 'Payment'],
+            'bank': ['Finance', 'Personal', 'Banking'],
+            
+            // News & Information
+            'news': ['News', 'Information', 'Current Events'],
+            'bbc.com': ['News', 'Information', 'Current Events'],
+            'cnn.com': ['News', 'Information', 'Current Events']
+        };
+        
+        for (const [domain, tags] of Object.entries(defaultSuggestions)) {
+            if (!this.domainTagSuggestions.has(domain)) {
+                this.domainTagSuggestions.set(domain, tags);
+            }
+        }
+        
+        await this.saveTagData();
+    }
+    
+    // Generate unique tag ID
+    generateTagId(name) {
+        return `tag_${name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${Date.now()}`;
+    }
+    
+    // Generate unique group ID
+    generateGroupId(name) {
+        return `group_${name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${Date.now()}`;
+    }
+    
+    // Create a new tag
+    async createTag(name, options = {}) {
+        if (!this.settings.tagsEnabled) return null;
+        
+        const tagId = this.generateTagId(name);
+        const tag = {
+            id: tagId,
+            name: name,
+            color: options.color || this.getDefaultTagColor(),
+            created: Date.now(),
+            lastUsed: Date.now(),
+            frequency: 0,
+            usage: {
+                daily: 0,
+                weekly: 0,
+                monthly: 0,
+                total: 0
+            },
+            autoSuspend: options.autoSuspend !== false,
+            priority: options.priority || 'medium', // low, medium, high
+            group: options.group || null
+        };
+        
+        this.tags.set(tagId, tag);
+        await this.saveTagData();
+        
+        // Update context menus
+        if (this.settings.tagsEnabled) {
+            this.updateContextMenuTags();
+        }
+        
+        console.log(`Created tag: ${name} (${tagId})`);
+        return tagId;
+    }
+    
+    // Delete a tag
+    async deleteTag(tagId) {
+        if (!this.tags.has(tagId)) return false;
+        
+        // Remove tag from all tabs
+        for (const [tabId, tagSet] of this.tabTags.entries()) {
+            if (tagSet.has(tagId)) {
+                tagSet.delete(tagId);
+                if (tagSet.size === 0) {
+                    this.tabTags.delete(tabId);
+                }
+            }
+        }
+        
+        // Remove from groups
+        for (const group of this.tagGroups.values()) {
+            if (group.tags && group.tags.includes(tagId)) {
+                group.tags = group.tags.filter(id => id !== tagId);
+            }
+        }
+        
+        // Remove tag and its usage history
+        this.tags.delete(tagId);
+        this.tagUsageHistory.delete(tagId);
+        
+        await this.saveTagData();
+        console.log(`Deleted tag: ${tagId}`);
+        return true;
+    }
+    
+    // Assign tag to tab
+    async assignTagToTab(tabId, tagId) {
+        if (!this.tags.has(tagId)) return false;
+        
+        if (!this.tabTags.has(tabId)) {
+            this.tabTags.set(tabId, new Set());
+        }
+        
+        const tabTagSet = this.tabTags.get(tabId);
+        if (tabTagSet.size >= this.settings.maxTagsPerTab) {
+            console.warn(`Tab ${tabId} already has maximum tags (${this.settings.maxTagsPerTab})`);
+            return false;
+        }
+        
+        tabTagSet.add(tagId);
+        
+        // Update tag usage
+        const tag = this.tags.get(tagId);
+        tag.lastUsed = Date.now();
+        tag.usage.total++;
+        tag.usage.daily++;
+        
+        await this.updateTagFrequency(tagId);
+        await this.saveTagData();
+        
+        console.log(`Assigned tag ${tagId} to tab ${tabId}`);
+        return true;
+    }
+    
+    // Remove tag from tab
+    async removeTagFromTab(tabId, tagId) {
+        const tabTagSet = this.tabTags.get(tabId);
+        if (!tabTagSet || !tabTagSet.has(tagId)) return false;
+        
+        tabTagSet.delete(tagId);
+        if (tabTagSet.size === 0) {
+            this.tabTags.delete(tabId);
+        }
+        
+        await this.saveTagData();
+        console.log(`Removed tag ${tagId} from tab ${tabId}`);
+        return true;
+    }
+    
+    // Get tags for a specific tab
+    getTabTags(tabId) {
+        const tagSet = this.tabTags.get(tabId);
+        if (!tagSet) return [];
+        
+        return Array.from(tagSet)
+            .map(tagId => this.tags.get(tagId))
+            .filter(tag => tag !== undefined);
+    }
+    
+    // Get all tabs with a specific tag
+    getTabsWithTag(tagId) {
+        const tabIds = [];
+        for (const [tabId, tagSet] of this.tabTags.entries()) {
+            if (tagSet.has(tagId)) {
+                tabIds.push(tabId);
+            }
+        }
+        return tabIds;
+    }
+    
+    // Update tag frequency based on usage patterns
+    async updateTagFrequency(tagId) {
+        const tag = this.tags.get(tagId);
+        if (!tag) return;
+        
+        const now = Date.now();
+        const dayMs = 24 * 60 * 60 * 1000;
+        const weekMs = 7 * dayMs;
+        const monthMs = 30 * dayMs;
+        
+        // Get or create usage history
+        if (!this.tagUsageHistory.has(tagId)) {
+            this.tagUsageHistory.set(tagId, []);
+        }
+        
+        const history = this.tagUsageHistory.get(tagId);
+        history.push({ timestamp: now, action: 'used' });
+        
+        // Keep only recent history (last month)
+        const cutoff = now - monthMs;
+        const recentHistory = history.filter(entry => entry.timestamp > cutoff);
+        this.tagUsageHistory.set(tagId, recentHistory);
+        
+        // Calculate frequency metrics
+        const dailyUsage = recentHistory.filter(entry => entry.timestamp > now - dayMs).length;
+        const weeklyUsage = recentHistory.filter(entry => entry.timestamp > now - weekMs).length;
+        const monthlyUsage = recentHistory.length;
+        
+        tag.usage.daily = dailyUsage;
+        tag.usage.weekly = weeklyUsage;
+        tag.usage.monthly = monthlyUsage;
+        
+        // Calculate frequency score (0-1)
+        // Weighted average: 50% daily, 30% weekly, 20% monthly
+        const maxDaily = 20; // max expected daily usage
+        const maxWeekly = 50; // max expected weekly usage
+        const maxMonthly = 100; // max expected monthly usage
+        
+        const dailyScore = Math.min(dailyUsage / maxDaily, 1);
+        const weeklyScore = Math.min(weeklyUsage / maxWeekly, 1);
+        const monthlyScore = Math.min(monthlyUsage / maxMonthly, 1);
+        
+        tag.frequency = (dailyScore * 0.5) + (weeklyScore * 0.3) + (monthlyScore * 0.2);
+        
+        console.log(`Updated frequency for tag ${tag.name}: ${tag.frequency.toFixed(3)}`);
+    }
+    
+    // Auto-suggest tags for a tab based on URL and domain
+    async suggestTagsForTab(tab) {
+        if (!this.settings.autoTagging || !this.settings.tagSuggestions) return [];
+        
+        const suggestions = new Set();
+        
+        try {
+            // Validate and normalize the URL
+            const tabUrl = tab.url || '';
+            const title = tab.title || '';
+            
+            // Skip invalid or special URLs
+            if (!tabUrl || 
+                tabUrl.startsWith('chrome://') || 
+                tabUrl.startsWith('chrome-extension://') || 
+                tabUrl.startsWith('edge://') || 
+                tabUrl.startsWith('about:') || 
+                tabUrl === 'about:blank') {
+                
+                // For special pages, try title-based suggestions only
+                const titleContent = title.toLowerCase();
+                const keywords = {
+                    'Development': ['github', 'stackoverflow', 'code', 'dev', 'api', 'docs', 'developer'],
+                    'Work': ['docs', 'drive', 'office', 'work', 'meeting', 'calendar', 'productivity'],
+                    'Social Media': ['facebook', 'twitter', 'instagram', 'social', 'linkedin'],
+                    'Entertainment': ['youtube', 'netflix', 'video', 'music', 'game', 'entertainment'],
+                    'Shopping': ['amazon', 'shop', 'cart', 'buy', 'store', 'shopping'],
+                    'News': ['news', 'article', 'breaking', 'update', 'latest'],
+                    'Learning': ['course', 'tutorial', 'learn', 'education', 'study'],
+                    'Research': ['wiki', 'research', 'paper', 'academic', 'study'],
+                    'Browser': ['chrome', 'edge', 'browser', 'extension', 'settings']
+                };
+                
+                for (const [tagName, keywords_list] of Object.entries(keywords)) {
+                    if (keywords_list.some(keyword => titleContent.includes(keyword))) {
+                        suggestions.add(tagName);
+                    }
+                }
+            } else {
+                // Try to parse as URL
+                let url, domain, pathname;
+                try {
+                    url = new URL(tabUrl);
+                    domain = url.hostname.replace('www.', '');
+                    pathname = url.pathname;
+                } catch (urlError) {
+                    console.debug(`Invalid URL for tab ${tab.id}: ${tabUrl}`);
+                    // Fallback: extract domain from URL string if possible
+                    const urlMatch = tabUrl.match(/https?:\/\/([^\/]+)/);
+                    if (urlMatch) {
+                        domain = urlMatch[1].replace('www.', '');
+                        pathname = '';
+                    } else {
+                        // Can't parse URL, use title-based suggestions only
+                        domain = '';
+                        pathname = '';
+                    }
+                }
+                
+                // Domain-based suggestions
+                if (domain) {
+                    for (const [domainPattern, tagNames] of this.domainTagSuggestions.entries()) {
+                        if (domain.includes(domainPattern) || domainPattern.includes(domain)) {
+                            tagNames.forEach(tagName => suggestions.add(tagName));
+                        }
+                    }
+                }
+                
+                // Content-based suggestions (title + pathname)
+                const content = `${title} ${pathname || ''}`.toLowerCase();
+                const keywords = {
+                    'Development': ['github', 'stackoverflow', 'code', 'dev', 'api', 'docs', 'programming'],
+                    'Work': ['docs', 'drive', 'office', 'work', 'meeting', 'calendar', 'productivity'],
+                    'Social Media': ['facebook', 'twitter', 'instagram', 'social', 'linkedin', 'reddit'],
+                    'Entertainment': ['youtube', 'netflix', 'video', 'music', 'game', 'entertainment', 'stream'],
+                    'Shopping': ['amazon', 'shop', 'cart', 'buy', 'store', 'shopping', 'ebay'],
+                    'News': ['news', 'article', 'breaking', 'update', 'latest', 'reuters', 'bbc', 'cnn'],
+                    'Learning': ['course', 'tutorial', 'learn', 'education', 'study', 'coursera', 'udemy'],
+                    'Research': ['wiki', 'research', 'paper', 'academic', 'study', 'scholar']
+                };
+                
+                for (const [tagName, keywords_list] of Object.entries(keywords)) {
+                    if (keywords_list.some(keyword => content.includes(keyword))) {
+                        suggestions.add(tagName);
+                    }
+                }
+            }
+            
+            // Convert suggestions to tag IDs or create new tags if needed
+            const suggestedTags = [];
+            for (const tagName of suggestions) {
+                let tagId = this.findTagByName(tagName);
+                if (!tagId && this.settings.autoTagging) {
+                    tagId = await this.createTag(tagName);
+                }
+                if (tagId) {
+                    suggestedTags.push(tagId);
+                }
+            }
+            
+            console.debug(`Tag suggestions for "${title}": ${Array.from(suggestions).join(', ')}`);
+            return suggestedTags;
+            
+        } catch (error) {
+            console.error('Error suggesting tags for tab:', error);
+            // Return title-based suggestions as fallback
+            try {
+                const titleContent = (tab.title || '').toLowerCase();
+                const fallbackKeywords = {
+                    'Work': ['work', 'office', 'meeting'],
+                    'Entertainment': ['video', 'music', 'game'],
+                    'Development': ['code', 'github']
+                };
+                
+                const fallbackSuggestions = [];
+                for (const [tagName, keywords] of Object.entries(fallbackKeywords)) {
+                    if (keywords.some(keyword => titleContent.includes(keyword))) {
+                        let tagId = this.findTagByName(tagName);
+                        if (!tagId && this.settings.autoTagging) {
+                            tagId = await this.createTag(tagName);
+                        }
+                        if (tagId) {
+                            fallbackSuggestions.push(tagId);
+                        }
+                    }
+                }
+                
+                return fallbackSuggestions;
+            } catch (fallbackError) {
+                console.error('Fallback tag suggestion also failed:', fallbackError);
+                return [];
+            }
+        }
+    }
+    
+    // Find tag by name
+    findTagByName(name) {
+        for (const [tagId, tag] of this.tags.entries()) {
+            if (tag.name.toLowerCase() === name.toLowerCase()) {
+                return tagId;
+            }
+        }
+        return null;
+    }
+    
+    // Get default color for new tags
+    getDefaultTagColor() {
+        const colors = [
+            '#2196F3', '#4CAF50', '#FF9800', '#9C27B0', 
+            '#F44336', '#795548', '#607D8B', '#3F51B5',
+            '#009688', '#8BC34A', '#FFC107', '#E91E63'
+        ];
+        return colors[Math.floor(Math.random() * colors.length)];
+    }
+    
+    // Get frequent tags (above threshold)
+    getFrequentTags() {
+        return Array.from(this.tags.values())
+            .filter(tag => tag.frequency >= this.settings.tagFrequencyThreshold)
+            .sort((a, b) => b.frequency - a.frequency);
+    }
+    
+    // Get active tags (used in last 24 hours)
+    getActiveTags() {
+        const dayMs = 24 * 60 * 60 * 1000;
+        const cutoff = Date.now() - dayMs;
+        
+        return Array.from(this.tags.values())
+            .filter(tag => tag.lastUsed > cutoff)
+            .sort((a, b) => b.lastUsed - a.lastUsed);
+    }
+    
+    // Get all tags sorted by usage
+    getAllTagsSorted() {
+        return Array.from(this.tags.values())
+            .sort((a, b) => {
+                // Sort by frequency first, then by last used
+                if (b.frequency !== a.frequency) {
+                    return b.frequency - a.frequency;
+                }
+                return b.lastUsed - a.lastUsed;
+            });
+    }
+    
+    // Schedule tag cleanup (remove unused tags)
+    scheduleTagCleanup() {
+        const cleanupInterval = 24 * 60 * 60 * 1000; // 24 hours
+        
+        setInterval(() => {
+            this.cleanupInactiveTags();
+        }, cleanupInterval);
+        
+        // Initial cleanup after 1 hour
+        setTimeout(() => {
+            this.cleanupInactiveTags();
+        }, 60 * 60 * 1000);
+    }
+    
+    // Remove tags that haven't been used for a long time
+    async cleanupInactiveTags() {
+        const now = Date.now();
+        const inactivityThreshold = this.settings.tagInactivityDays * 24 * 60 * 60 * 1000;
+        const cutoff = now - inactivityThreshold;
+        
+        const tagsToDelete = [];
+        
+        for (const [tagId, tag] of this.tags.entries()) {
+            // Don't delete tags that are currently assigned to tabs
+            const hasAssignedTabs = this.getTabsWithTag(tagId).length > 0;
+            if (hasAssignedTabs) continue;
+            
+            // Don't delete frequently used tags
+            if (tag.frequency >= this.settings.tagFrequencyThreshold) continue;
+            
+            // Delete if not used for threshold period
+            if (tag.lastUsed < cutoff) {
+                tagsToDelete.push(tagId);
+            }
+        }
+        
+        for (const tagId of tagsToDelete) {
+            await this.deleteTag(tagId);
+        }
+        
+        if (tagsToDelete.length > 0) {
+            console.log(`Cleaned up ${tagsToDelete.length} inactive tags`);
+        }
+        
+        this.lastTagCleanup = now;
+    }
+    
+    // Schedule notification cooldown cleanup
+    scheduleNotificationCleanup() {
+        // Clean up old cooldowns every 10 minutes
+        setInterval(() => {
+            this.cleanupNotificationCooldowns();
+        }, 10 * 60 * 1000);
+    }
+    
+    // Remove old notification cooldowns
+    cleanupNotificationCooldowns() {
+        const now = Date.now();
+        const maxAge = 60 * 60 * 1000; // 1 hour
+        
+        for (const [key, timestamp] of this.notificationCooldowns.entries()) {
+            if (now - timestamp > maxAge) {
+                this.notificationCooldowns.delete(key);
+            }
+        }
+        
+        console.debug(`Cleaned up notification cooldowns, ${this.notificationCooldowns.size} remaining`);
+    }
+    
+    // Save tag data to storage
+    async saveTagData() {
+        try {
+            const tagData = {
+                fastbrowse_tags: Object.fromEntries(this.tags),
+                fastbrowse_tab_tags: Object.fromEntries(
+                    Array.from(this.tabTags.entries()).map(([tabId, tagSet]) => [
+                        tabId.toString(),
+                        Array.from(tagSet)
+                    ])
+                ),
+                fastbrowse_tag_groups: Object.fromEntries(this.tagGroups),
+                fastbrowse_tag_usage: Object.fromEntries(this.tagUsageHistory),
+                fastbrowse_domain_suggestions: Object.fromEntries(this.domainTagSuggestions)
+            };
+            
+            await chrome.storage.local.set(tagData);
+        } catch (error) {
+            console.error('Failed to save tag data:', error);
+        }
+    }
+    
+    // Update usage for all tags associated with a tab
+    async updateTabTagUsage(tabId) {
+        const tabTagSet = this.tabTags.get(tabId);
+        if (!tabTagSet || tabTagSet.size === 0) return;
+        
+        for (const tagId of tabTagSet) {
+            await this.updateTagFrequency(tagId);
+        }
+        
+        await this.saveTagData();
+    }
+    
+    // ============================================================================
+    // TAG GROUPING ALGORITHMS
+    // ============================================================================
+    
+    // Create a tag group
+    async createTagGroup(name, tagIds = [], options = {}) {
+        const groupId = this.generateGroupId(name);
+        const group = {
+            id: groupId,
+            name: name,
+            tags: tagIds,
+            created: Date.now(),
+            lastUsed: Date.now(),
+            suspendRule: options.suspendRule || 'inactive', // never, inactive, always
+            color: options.color || this.getDefaultTagColor(),
+            autoSuspendDelay: options.autoSuspendDelay || 30, // minutes
+            priority: options.priority || 'medium'
+        };
+        
+        this.tagGroups.set(groupId, group);
+        await this.saveTagData();
+        
+        console.log(`Created tag group: ${name} (${groupId})`);
+        return groupId;
+    }
+    
+    // Auto-group tabs based on various criteria
+    async autoGroupTabs() {
+        if (!this.settings.tagsEnabled) return;
+        
+        console.log('Starting auto-grouping process...');
+        
+        const tabs = await chrome.tabs.query({});
+        const groupSuggestions = [];
+        
+        // Group by domain similarity
+        const domainGroups = await this.groupTabsByDomain(tabs);
+        groupSuggestions.push(...domainGroups);
+        
+        // Group by tag co-occurrence
+        const tagCoGroups = await this.groupTabsByTagCooccurrence(tabs);
+        groupSuggestions.push(...tagCoGroups);
+        
+        // Group by usage patterns
+        const usageGroups = await this.groupTabsByUsagePattern(tabs);
+        groupSuggestions.push(...usageGroups);
+        
+        // Group by time-based patterns
+        const timeGroups = await this.groupTabsByTimePattern(tabs);
+        groupSuggestions.push(...timeGroups);
+        
+        console.log(`Generated ${groupSuggestions.length} auto-grouping suggestions`);
+        return groupSuggestions;
+    }
+    
+    // Group tabs by domain similarity
+    async groupTabsByDomain(tabs) {
+        const domainGroups = new Map();
+        const suggestions = [];
+        
+        for (const tab of tabs) {
+            try {
+                const url = new URL(tab.url);
+                const domain = url.hostname.replace('www.', '');
+                
+                if (!domainGroups.has(domain)) {
+                    domainGroups.set(domain, []);
+                }
+                domainGroups.get(domain).push(tab);
+            } catch (error) {
+                // Skip invalid URLs
+                continue;
+            }
+        }
+        
+        // Create suggestions for domains with multiple tabs
+        for (const [domain, domainTabs] of domainGroups.entries()) {
+            if (domainTabs.length >= 2) {
+                const domainName = domain.split('.')[0];
+                const groupName = domainName.charAt(0).toUpperCase() + domainName.slice(1);
+                
+                suggestions.push({
+                    type: 'domain',
+                    name: groupName,
+                    tabs: domainTabs,
+                    confidence: Math.min(domainTabs.length / 5, 1), // Higher confidence with more tabs
+                    reason: `${domainTabs.length} tabs from ${domain}`
+                });
+            }
+        }
+        
+        return suggestions.sort((a, b) => b.confidence - a.confidence);
+    }
+    
+    // Group tabs by tag co-occurrence patterns
+    async groupTabsByTagCooccurrence(tabs) {
+        const tagCombinations = new Map();
+        const suggestions = [];
+        
+        // Analyze which tags frequently appear together
+        for (const tab of tabs) {
+            const tabTags = this.getTabTags(tab.id);
+            if (tabTags.length < 2) continue;
+            
+            // Generate all combinations of tags for this tab
+            for (let i = 0; i < tabTags.length; i++) {
+                for (let j = i + 1; j < tabTags.length; j++) {
+                    const combo = [tabTags[i].id, tabTags[j].id].sort().join(',');
+                    
+                    if (!tagCombinations.has(combo)) {
+                        tagCombinations.set(combo, {
+                            tags: [tabTags[i], tabTags[j]],
+                            tabs: [],
+                            count: 0
+                        });
+                    }
+                    
+                    tagCombinations.get(combo).tabs.push(tab);
+                    tagCombinations.get(combo).count++;
+                }
+            }
+        }
+        
+        // Create suggestions for frequent tag combinations
+        for (const [combo, data] of tagCombinations.entries()) {
+            if (data.count >= 3) { // At least 3 co-occurrences
+                const groupName = data.tags.map(tag => tag.name).join(' + ');
+                
+                suggestions.push({
+                    type: 'tag-cooccurrence',
+                    name: groupName,
+                    tags: data.tags,
+                    tabs: data.tabs,
+                    confidence: Math.min(data.count / 10, 1),
+                    reason: `${data.count} tabs with both tags`
+                });
+            }
+        }
+        
+        return suggestions.sort((a, b) => b.confidence - a.confidence);
+    }
+    
+    // Group tabs by usage patterns (frequent vs occasional)
+    async groupTabsByUsagePattern(tabs) {
+        const suggestions = [];
+        const frequentTabs = [];
+        const occasionalTabs = [];
+        
+        for (const tab of tabs) {
+            const tabTags = this.getTabTags(tab.id);
+            const avgFrequency = tabTags.length > 0 
+                ? tabTags.reduce((sum, tag) => sum + tag.frequency, 0) / tabTags.length
+                : 0;
+            
+            if (avgFrequency >= this.settings.tagFrequencyThreshold) {
+                frequentTabs.push(tab);
+            } else if (avgFrequency > 0) {
+                occasionalTabs.push(tab);
+            }
+        }
+        
+        if (frequentTabs.length >= 3) {
+            suggestions.push({
+                type: 'usage-frequent',
+                name: 'Frequent Use',
+                tabs: frequentTabs,
+                confidence: Math.min(frequentTabs.length / 10, 1),
+                reason: `${frequentTabs.length} frequently used tabs`,
+                priority: 'high'
+            });
+        }
+        
+        if (occasionalTabs.length >= 5) {
+            suggestions.push({
+                type: 'usage-occasional',
+                name: 'Occasional Use',
+                tabs: occasionalTabs,
+                confidence: Math.min(occasionalTabs.length / 15, 1),
+                reason: `${occasionalTabs.length} occasionally used tabs`,
+                priority: 'low'
+            });
+        }
+        
+        return suggestions.sort((a, b) => b.confidence - a.confidence);
+    }
+    
+    // Group tabs by time-based patterns (work hours, etc.)
+    async groupTabsByTimePattern(tabs) {
+        const suggestions = [];
+        const now = new Date();
+        const currentHour = now.getHours();
+        
+        // Define time periods
+        const timePatterns = {
+            'Morning Work': { start: 8, end: 12, tags: ['Work', 'Development', 'Productivity'] },
+            'Afternoon Work': { start: 13, end: 17, tags: ['Work', 'Development', 'Productivity'] },
+            'Evening Personal': { start: 18, end: 22, tags: ['Personal', 'Entertainment', 'Social Media'] },
+            'Late Night': { start: 22, end: 6, tags: ['Entertainment', 'Personal', 'Research'] }
+        };
+        
+        for (const [patternName, pattern] of Object.entries(timePatterns)) {
+            const matchingTabs = [];
+            
+            for (const tab of tabs) {
+                const tabTags = this.getTabTags(tab.id);
+                const hasMatchingTag = tabTags.some(tag => 
+                    pattern.tags.some(patternTag => 
+                        tag.name.toLowerCase().includes(patternTag.toLowerCase())
+                    )
+                );
+                
+                // Check if current time matches pattern
+                const isTimeMatch = (pattern.start <= pattern.end) 
+                    ? (currentHour >= pattern.start && currentHour <= pattern.end)
+                    : (currentHour >= pattern.start || currentHour <= pattern.end);
+                
+                if (hasMatchingTag && isTimeMatch) {
+                    matchingTabs.push(tab);
+                }
+            }
+            
+            if (matchingTabs.length >= 2) {
+                suggestions.push({
+                    type: 'time-pattern',
+                    name: patternName,
+                    tabs: matchingTabs,
+                    confidence: Math.min(matchingTabs.length / 5, 1),
+                    reason: `${matchingTabs.length} tabs matching ${patternName.toLowerCase()} pattern`,
+                    timePattern: pattern
+                });
+            }
+        }
+        
+        return suggestions.sort((a, b) => b.confidence - a.confidence);
     }
     
     // Extension Monitoring Methods
@@ -1037,10 +1996,19 @@ class FastBrowse {
                     
                 case 'getAllTabs':
                     const tabs = await chrome.tabs.query({});
-                    const tabsWithSuspendState = tabs.map(tab => ({
-                        ...tab,
-                        suspended: this.suspendedTabs.has(tab.id)
-                    }));
+                    const tabsWithSuspendState = tabs.map(tab => {
+                        const tabData = {
+                            ...tab,
+                            suspended: this.suspendedTabs.has(tab.id)
+                        };
+                        
+                        // Add tag information if tags are enabled
+                        if (this.settings.tagsEnabled) {
+                            tabData.tags = this.getTabTags(tab.id);
+                        }
+                        
+                        return tabData;
+                    });
                     console.log(`Found ${tabs.length} tabs, ${this.suspendedTabs.size} suspended`);
                     sendResponse({ success: true, data: tabsWithSuspendState });
                     break;
@@ -1184,12 +2152,385 @@ class FastBrowse {
                     }
                     break;
                     
+                // Tag management actions
+                case 'getAllTags':
+                    const allTags = this.getAllTagsSorted();
+                    sendResponse({ success: true, data: allTags });
+                    break;
+                    
+                case 'getFrequentTags':
+                    const frequentTags = this.getFrequentTags();
+                    sendResponse({ success: true, data: frequentTags });
+                    break;
+                    
+                case 'getActiveTags':
+                    const activeTags = this.getActiveTags();
+                    sendResponse({ success: true, data: activeTags });
+                    break;
+                    
+                case 'createTag':
+                    try {
+                        const tagId = await this.createTag(request.name, request.options || {});
+                        sendResponse({ success: true, data: { tagId } });
+                    } catch (error) {
+                        console.error('Failed to create tag:', error);
+                        sendResponse({ success: false, error: error.message });
+                    }
+                    break;
+                    
+                case 'deleteTag':
+                    try {
+                        const result = await this.deleteTag(request.tagId);
+                        sendResponse({ success: result });
+                    } catch (error) {
+                        console.error('Failed to delete tag:', error);
+                        sendResponse({ success: false, error: error.message });
+                    }
+                    break;
+                    
+                case 'assignTagToTab':
+                    try {
+                        const result = await this.assignTagToTab(request.tabId, request.tagId);
+                        sendResponse({ success: result });
+                    } catch (error) {
+                        console.error('Failed to assign tag to tab:', error);
+                        sendResponse({ success: false, error: error.message });
+                    }
+                    break;
+                    
+                case 'removeTagFromTab':
+                    try {
+                        const result = await this.removeTagFromTab(request.tabId, request.tagId);
+                        sendResponse({ success: result });
+                    } catch (error) {
+                        console.error('Failed to remove tag from tab:', error);
+                        sendResponse({ success: false, error: error.message });
+                    }
+                    break;
+                    
+                case 'getTabTags':
+                    try {
+                        const tags = this.getTabTags(request.tabId);
+                        sendResponse({ success: true, data: tags });
+                    } catch (error) {
+                        console.error('Failed to get tab tags:', error);
+                        sendResponse({ success: false, error: error.message });
+                    }
+                    break;
+                    
+                case 'suggestTagsForTab':
+                    try {
+                        const tab = await chrome.tabs.get(request.tabId);
+                        const suggestions = await this.suggestTagsForTab(tab);
+                        sendResponse({ success: true, data: suggestions });
+                    } catch (error) {
+                        console.error('Failed to suggest tags for tab:', error);
+                        sendResponse({ success: false, error: error.message });
+                    }
+                    break;
+                    
+                case 'getTabsWithTag':
+                    try {
+                        const tabIds = this.getTabsWithTag(request.tagId);
+                        const tabs = [];
+                        for (const tabId of tabIds) {
+                            try {
+                                const tab = await chrome.tabs.get(tabId);
+                                tabs.push(tab);
+                            } catch (e) {
+                                // Tab might have been closed, clean up
+                                await this.removeTagFromTab(tabId, request.tagId);
+                            }
+                        }
+                        sendResponse({ success: true, data: tabs });
+                    } catch (error) {
+                        console.error('Failed to get tabs with tag:', error);
+                        sendResponse({ success: false, error: error.message });
+                    }
+                    break;
+                    
+                case 'autoGroupTabs':
+                    try {
+                        const suggestions = await this.autoGroupTabs();
+                        sendResponse({ success: true, data: suggestions });
+                    } catch (error) {
+                        console.error('Failed to auto-group tabs:', error);
+                        sendResponse({ success: false, error: error.message });
+                    }
+                    break;
+                    
+                case 'createTagGroup':
+                    try {
+                        const groupId = await this.createTagGroup(
+                            request.name,
+                            request.tagIds || [],
+                            request.options || {}
+                        );
+                        sendResponse({ success: true, data: { groupId } });
+                    } catch (error) {
+                        console.error('Failed to create tag group:', error);
+                        sendResponse({ success: false, error: error.message });
+                    }
+                    break;
+                    
+                case 'getTagGroups':
+                    try {
+                        const groups = Array.from(this.tagGroups.values());
+                        sendResponse({ success: true, data: groups });
+                    } catch (error) {
+                        console.error('Failed to get tag groups:', error);
+                        sendResponse({ success: false, error: error.message });
+                    }
+                    break;
+                    
                 default:
                     sendResponse({ success: false, error: 'Unknown action' });
             }
         } catch (error) {
             console.error('Message handler error:', error);
             sendResponse({ success: false, error: error.message });
+        }
+    }
+    
+    // ============================================================================
+    // CONTEXT MENUS AND KEYBOARD SHORTCUTS
+    // ============================================================================
+    
+    setupContextMenus() {
+        if (!this.settings.tagsEnabled) return;
+        
+        try {
+            // Remove existing context menus
+            chrome.contextMenus.removeAll();
+            
+            // Main tag management menu
+            chrome.contextMenus.create({
+                id: 'fastbrowse-tags',
+                title: '🏷️ FastBrowse Tags',
+                contexts: ['page', 'action']
+            });
+            
+            // Quick tag options
+            chrome.contextMenus.create({
+                id: 'quick-tag-current',
+                parentId: 'fastbrowse-tags',
+                title: 'Quick Tag Current Tab',
+                contexts: ['page', 'action']
+            });
+            
+            chrome.contextMenus.create({
+                id: 'suggest-tags',
+                parentId: 'fastbrowse-tags',
+                title: 'Suggest Tags for This Tab',
+                contexts: ['page', 'action']
+            });
+            
+            chrome.contextMenus.create({
+                id: 'separator1',
+                parentId: 'fastbrowse-tags',
+                type: 'separator',
+                contexts: ['page', 'action']
+            });
+            
+            // Auto-grouping
+            chrome.contextMenus.create({
+                id: 'auto-group-tabs',
+                parentId: 'fastbrowse-tags',
+                title: 'Auto-Group All Tabs',
+                contexts: ['page', 'action']
+            });
+            
+            chrome.contextMenus.create({
+                id: 'separator2',
+                parentId: 'fastbrowse-tags',
+                type: 'separator',
+                contexts: ['page', 'action']
+            });
+            
+            // Add recent tags as submenu items
+            this.updateContextMenuTags();
+            
+            // Listen for context menu clicks
+            chrome.contextMenus.onClicked.addListener((info, tab) => {
+                this.handleContextMenuClick(info, tab);
+            });
+            
+        } catch (error) {
+            console.error('Failed to setup context menus:', error);
+        }
+    }
+    
+    async updateContextMenuTags() {
+        try {
+            const frequentTags = this.getFrequentTags().slice(0, 5); // Top 5 frequent tags
+            
+            // Remove existing tag items using callback-based approach to avoid errors
+            const existingItems = ['assign-tag-separator'];
+            for (let i = 0; i < 10; i++) {
+                existingItems.push(`assign-tag-${i}`);
+            }
+            
+            // Use Promise-based removal with proper error handling
+            const removePromises = existingItems.map(id => {
+                return new Promise((resolve) => {
+                    chrome.contextMenus.remove(id, () => {
+                        // Ignore chrome.runtime.lastError - item might not exist
+                        if (chrome.runtime.lastError) {
+                            console.debug(`Context menu item ${id} doesn't exist, skipping removal`);
+                        }
+                        resolve();
+                    });
+                });
+            });
+            
+            // Wait for all removals to complete
+            await Promise.all(removePromises);
+            
+            // Small delay to ensure removals are processed
+            await new Promise(resolve => setTimeout(resolve, 50));
+            
+            if (frequentTags.length > 0) {
+                chrome.contextMenus.create({
+                    id: 'assign-tag-separator',
+                    parentId: 'fastbrowse-tags',
+                    type: 'separator',
+                    contexts: ['page', 'action']
+                });
+                
+                frequentTags.forEach((tag, index) => {
+                    chrome.contextMenus.create({
+                        id: `assign-tag-${index}`,
+                        parentId: 'fastbrowse-tags',
+                        title: `📌 Assign "${tag.name}"`,
+                        contexts: ['page', 'action']
+                    });
+                });
+            }
+            
+        } catch (error) {
+            console.error('Failed to update context menu tags:', error);
+        }
+    }
+    
+    async handleContextMenuClick(info, tab) {
+        try {
+            switch (info.menuItemId) {
+                case 'quick-tag-current':
+                    await this.quickTagCurrentTab(tab);
+                    break;
+                    
+                case 'suggest-tags':
+                    await this.showTagSuggestionsForTab(tab);
+                    break;
+                    
+                case 'auto-group-tabs':
+                    await this.autoGroupTabs();
+                    this.showNotification('Auto-grouping completed! Check the popup for suggestions.');
+                    break;
+                    
+                default:
+                    // Check if it's an assign-tag action
+                    if (info.menuItemId.startsWith('assign-tag-')) {
+                        const tagIndex = parseInt(info.menuItemId.replace('assign-tag-', ''));
+                        const frequentTags = this.getFrequentTags();
+                        
+                        if (frequentTags[tagIndex]) {
+                            await this.assignTagToTab(tab.id, frequentTags[tagIndex].id);
+                            this.showNotification(`Tagged "${tab.title}" with "${frequentTags[tagIndex].name}"`);
+                        }
+                    }
+                    break;
+            }
+        } catch (error) {
+            console.error('Context menu action failed:', error);
+            this.showNotification(`Action failed: ${error.message}`);
+        }
+    }
+    
+    async handleCommand(command) {
+        try {
+            switch (command) {
+                case 'toggle-focus-mode':
+                    await this.toggleFocusMode();
+                    break;
+                    
+                case 'suspend-all-tabs':
+                    await this.suspendAllTabs();
+                    this.showNotification('All eligible tabs have been suspended');
+                    break;
+                    
+                case 'auto-group-tabs':
+                    await this.autoGroupTabs();
+                    this.showNotification('Auto-grouping completed! Check the popup for suggestions.');
+                    break;
+                    
+                case 'quick-tag-current':
+                    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+                    if (tabs.length > 0) {
+                        await this.quickTagCurrentTab(tabs[0]);
+                    }
+                    break;
+            }
+        } catch (error) {
+            console.error('Keyboard shortcut action failed:', error);
+            this.showNotification(`Action failed: ${error.message}`);
+        }
+    }
+    
+    // Quick tag the current tab with suggestions
+    async quickTagCurrentTab(tab) {
+        try {
+            const suggestions = await this.suggestTagsForTab(tab);
+            
+            if (suggestions.length === 0) {
+                this.showNotification('No tag suggestions found for this tab');
+                return;
+            }
+            
+            // Auto-assign the first suggestion
+            const tagId = suggestions[0];
+            const tag = this.tags.get(tagId);
+            
+            if (tag) {
+                await this.assignTagToTab(tab.id, tagId);
+                this.showNotification(`Quick-tagged "${tab.title}" with "${tag.name}"`);
+                
+                // Update context menu
+                this.updateContextMenuTags();
+            }
+        } catch (error) {
+            console.error('Quick tagging failed:', error);
+            this.showNotification('Quick tagging failed');
+        }
+    }
+    
+    // Show tag suggestions for a tab via notification
+    async showTagSuggestionsForTab(tab) {
+        try {
+            const suggestions = await this.suggestTagsForTab(tab);
+            
+            if (suggestions.length === 0) {
+                this.showNotification('No tag suggestions found for this tab');
+                return;
+            }
+            
+            const tagNames = suggestions.slice(0, 3).map(tagId => {
+                const tag = this.tags.get(tagId);
+                return tag ? tag.name : 'Unknown';
+            }).join(', ');
+            
+            this.showNotification(
+                `Suggested tags for "${tab.title}": ${tagNames}`,
+                {
+                    buttons: [{
+                        title: 'Apply All'
+                    }],
+                    requireInteraction: true
+                }
+            );
+        } catch (error) {
+            console.error('Failed to show tag suggestions:', error);
+            this.showNotification('Failed to get tag suggestions');
         }
     }
 }

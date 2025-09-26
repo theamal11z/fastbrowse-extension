@@ -21,6 +21,26 @@ class PopupManager {
         this.focusTabsElement = document.getElementById('focus-tabs');
         this.focusRecommendationsButton = document.getElementById('focus-recommendations');
         
+        // Tag management elements
+        this.showAllTabsButton = document.getElementById('show-all-tabs');
+        this.showFrequentTagsButton = document.getElementById('show-frequent-tags');
+        this.showActiveTagsButton = document.getElementById('show-active-tags');
+        this.tagFilterSelect = document.getElementById('tag-filter-select');
+        this.autoGroupTabsButton = document.getElementById('auto-group-tabs');
+        this.toggleTagsButton = document.getElementById('toggle-tags');
+        this.closeTagsButton = document.getElementById('close-tags');
+        this.tagsSectionElement = document.getElementById('tags-section');
+        this.tagsDisplayElement = document.getElementById('tags-display');
+        this.frequentTagPillsElement = document.getElementById('frequent-tag-pills');
+        this.activeTagPillsElement = document.getElementById('active-tag-pills');
+        this.groupSuggestionsElement = document.getElementById('group-suggestions');
+        
+        // Current filter state
+        this.currentFilter = 'all';
+        this.selectedTagId = null;
+        this.currentTabs = [];
+        this.allTags = [];
+        
         this.init();
     }
     
@@ -28,6 +48,7 @@ class PopupManager {
         await this.loadMemoryInfo();
         await this.loadTabList();
         await this.loadFocusState();
+        await this.loadTagData();
         this.setupEventListeners();
     }
     
@@ -56,11 +77,45 @@ class PopupManager {
             this.showFocusRecommendations();
         });
         
+        // Tag management event listeners
+        this.showAllTabsButton.addEventListener('click', () => {
+            this.setFilter('all');
+        });
+        
+        this.showFrequentTagsButton.addEventListener('click', () => {
+            this.setFilter('frequent');
+        });
+        
+        this.showActiveTagsButton.addEventListener('click', () => {
+            this.setFilter('active');
+        });
+        
+        this.tagFilterSelect.addEventListener('change', (e) => {
+            if (e.target.value) {
+                this.setFilter('tag', e.target.value);
+            } else {
+                this.setFilter('all');
+            }
+        });
+        
+        this.autoGroupTabsButton.addEventListener('click', () => {
+            this.autoGroupTabs();
+        });
+        
+        this.toggleTagsButton.addEventListener('click', () => {
+            this.toggleTagsSection();
+        });
+        
+        this.closeTagsButton.addEventListener('click', () => {
+            this.closeTagsSection();
+        });
+        
         // Refresh data every 5 seconds
         setInterval(() => {
             this.loadMemoryInfo();
             this.loadTabList();
             this.loadFocusState();
+            this.loadTagData();
         }, 5000);
     }
     
@@ -101,19 +156,64 @@ class PopupManager {
         }
     }
     
+    async loadTagData() {
+        try {
+            // Load all tags
+            const allTagsResponse = await this.sendMessage({ action: 'getAllTags' });
+            if (allTagsResponse.success) {
+                this.allTags = allTagsResponse.data;
+                this.updateTagFilterOptions();
+                
+                // Show tag toggle icon if tags are available
+                if (this.allTags.length > 0) {
+                    this.toggleTagsButton.style.display = 'inline-block';
+                }
+            }
+            
+            // Load frequent and active tags if tags section is visible
+            if (this.tagsSectionElement.style.display !== 'none') {
+                await this.updateTagsDisplay();
+            }
+        } catch (error) {
+            console.error('Failed to load tag data:', error);
+        }
+    }
+    
+    updateTagFilterOptions() {
+        // Update the tag filter select options
+        this.tagFilterSelect.innerHTML = '<option value="">Filter by tag...</option>';
+        
+        this.allTags.forEach(tag => {
+            const option = document.createElement('option');
+            option.value = tag.id;
+            option.textContent = `${tag.name} (${tag.usage.total})`;
+            this.tagFilterSelect.appendChild(option);
+        });
+        
+        // Show select if there are tags
+        if (this.allTags.length > 0) {
+            this.tagFilterSelect.style.display = 'inline-block';
+        }
+    }
+    
     renderTabList(tabs) {
+        this.currentTabs = tabs; // Store for filtering
+        
+        // Apply current filter
+        let filteredTabs = this.filterTabs(tabs);
+        
         // Clear existing list
         this.tabListElement.innerHTML = '';
         
         // Sort tabs: active first, then by window, then by index
-        tabs.sort((a, b) => {
+        filteredTabs.sort((a, b) => {
             if (a.active !== b.active) return b.active - a.active;
             if (a.windowId !== b.windowId) return a.windowId - b.windowId;
             return a.index - b.index;
         });
         
         // Group tabs by window
-        const tabsByWindow = tabs.reduce((groups, tab) => {
+        const tabsByWindow = filteredTabs.reduce((groups, tab) => {
             if (!groups[tab.windowId]) {
                 groups[tab.windowId] = [];
             }
@@ -140,9 +240,257 @@ class PopupManager {
         });
     }
     
+    // ============================================================================
+    // TAG MANAGEMENT METHODS
+    // ============================================================================
+    
+    filterTabs(tabs) {
+        switch (this.currentFilter) {
+            case 'frequent':
+                return tabs.filter(tab => 
+                    tab.tags && tab.tags.some(tag => tag.frequency >= 0.3)
+                );
+                
+            case 'active':
+                const dayMs = 24 * 60 * 60 * 1000;
+                const cutoff = Date.now() - dayMs;
+                return tabs.filter(tab => 
+                    tab.tags && tab.tags.some(tag => tag.lastUsed > cutoff)
+                );
+                
+            case 'tag':
+                return tabs.filter(tab => 
+                    tab.tags && tab.tags.some(tag => tag.id === this.selectedTagId)
+                );
+                
+            default:
+                return tabs;
+        }
+    }
+    
+    setFilter(type, tagId = null) {
+        this.currentFilter = type;
+        this.selectedTagId = tagId;
+        
+        // Update button states
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        
+        switch (type) {
+            case 'frequent':
+                this.showFrequentTagsButton.classList.add('active');
+                break;
+            case 'active':
+                this.showActiveTagsButton.classList.add('active');
+                break;
+            case 'tag':
+                this.tagFilterSelect.value = tagId;
+                break;
+            default:
+                this.showAllTabsButton.classList.add('active');
+                this.tagFilterSelect.value = '';
+        }
+        
+        // Re-render tab list with new filter
+        if (this.currentTabs.length > 0) {
+            this.renderTabList(this.currentTabs);
+        }
+    }
+    
+    toggleTagsSection() {
+        const isVisible = this.tagsSectionElement.style.display !== 'none';
+        this.tagsSectionElement.style.display = isVisible ? 'none' : 'block';
+        this.toggleTagsButton.classList.toggle('active', !isVisible);
+        
+        if (!isVisible) {
+            this.updateTagsDisplay();
+        }
+    }
+    
+    closeTagsSection() {
+        this.tagsSectionElement.style.display = 'none';
+        this.toggleTagsButton.classList.remove('active');
+    }
+    
+    async updateTagsDisplay() {
+        try {
+            // Load frequent tags
+            const frequentResponse = await this.sendMessage({ action: 'getFrequentTags' });
+            if (frequentResponse.success) {
+                this.renderTagPills(frequentResponse.data, this.frequentTagPillsElement, 'frequent');
+            }
+            
+            // Load active tags
+            const activeResponse = await this.sendMessage({ action: 'getActiveTags' });
+            if (activeResponse.success) {
+                this.renderTagPills(activeResponse.data, this.activeTagPillsElement, 'active');
+            }
+        } catch (error) {
+            console.error('Failed to update tags display:', error);
+        }
+    }
+    
+    renderTagPills(tags, container, type) {
+        container.innerHTML = '';
+        
+        if (tags.length === 0) {
+            const noTags = document.createElement('div');
+            noTags.textContent = `No ${type} tags found`;
+            noTags.style.color = '#999';
+            noTags.style.fontSize = '11px';
+            container.appendChild(noTags);
+            return;
+        }
+        
+        tags.forEach(tag => {
+            const pill = document.createElement('div');
+            pill.className = `tag-pill ${type === 'frequent' ? 'frequent' : ''} ${tag.priority === 'high' ? 'high-priority' : ''}`;
+            pill.style.backgroundColor = tag.color + '20'; // 20% opacity
+            pill.style.borderColor = tag.color;
+            pill.style.color = tag.color;
+            
+            const tagName = document.createElement('span');
+            tagName.textContent = tag.name;
+            pill.appendChild(tagName);
+            
+            const frequency = document.createElement('span');
+            frequency.className = 'tag-frequency';
+            frequency.textContent = `${(tag.frequency * 100).toFixed(0)}%`;
+            pill.appendChild(frequency);
+            
+            // Click to filter by this tag
+            pill.addEventListener('click', () => {
+                this.setFilter('tag', tag.id);
+            });
+            
+            container.appendChild(pill);
+        });
+    }
+    
+    async autoGroupTabs() {
+        try {
+            this.autoGroupTabsButton.disabled = true;
+            this.autoGroupTabsButton.textContent = 'Analyzing...';
+            
+            const response = await this.sendMessage({ action: 'autoGroupTabs' });
+            if (response.success) {
+                this.renderGroupSuggestions(response.data);
+                
+                // Show tags section if hidden
+                if (this.tagsSectionElement.style.display === 'none') {
+                    this.toggleTagsSection();
+                }
+            } else {
+                throw new Error(response.error || 'Failed to generate suggestions');
+            }
+        } catch (error) {
+            console.error('Failed to auto-group tabs:', error);
+            alert(`Failed to auto-group tabs: ${error.message}`);
+        } finally {
+            this.autoGroupTabsButton.disabled = false;
+            this.autoGroupTabsButton.textContent = 'Auto-Group';
+        }
+    }
+    
+    renderGroupSuggestions(suggestions) {
+        this.groupSuggestionsElement.innerHTML = '';
+        
+        if (suggestions.length === 0) {
+            const noSuggestions = document.createElement('div');
+            noSuggestions.textContent = 'No grouping suggestions found';
+            noSuggestions.style.color = '#999';
+            noSuggestions.style.fontSize = '11px';
+            this.groupSuggestionsElement.appendChild(noSuggestions);
+            return;
+        }
+        
+        // Show top 3 suggestions
+        suggestions.slice(0, 3).forEach(suggestion => {
+            const suggestionDiv = document.createElement('div');
+            suggestionDiv.className = 'group-suggestion';
+            
+            const header = document.createElement('div');
+            header.className = 'group-suggestion-header';
+            header.textContent = suggestion.name;
+            suggestionDiv.appendChild(header);
+            
+            const reason = document.createElement('div');
+            reason.className = 'group-suggestion-reason';
+            reason.textContent = suggestion.reason;
+            suggestionDiv.appendChild(reason);
+            
+            const actions = document.createElement('div');
+            actions.className = 'group-suggestion-actions';
+            
+            const createBtn = document.createElement('button');
+            createBtn.className = 'create-group-btn';
+            createBtn.textContent = 'Create Group';
+            createBtn.addEventListener('click', () => {
+                this.createGroupFromSuggestion(suggestion);
+            });
+            actions.appendChild(createBtn);
+            
+            const dismissBtn = document.createElement('button');
+            dismissBtn.className = 'dismiss-suggestion-btn';
+            dismissBtn.textContent = 'Dismiss';
+            dismissBtn.addEventListener('click', () => {
+                suggestionDiv.remove();
+            });
+            actions.appendChild(dismissBtn);
+            
+            suggestionDiv.appendChild(actions);
+            this.groupSuggestionsElement.appendChild(suggestionDiv);
+        });
+    }
+    
+    async createGroupFromSuggestion(suggestion) {
+        try {
+            const response = await this.sendMessage({
+                action: 'createTagGroup',
+                name: suggestion.name,
+                tagIds: suggestion.tags ? suggestion.tags.map(tag => tag.id) : [],
+                options: {
+                    suspendRule: suggestion.priority === 'low' ? 'inactive' : 'never',
+                    priority: suggestion.priority || 'medium'
+                }
+            });
+            
+            if (response.success) {
+                alert(`Group "${suggestion.name}" created successfully!`);
+                // Refresh the display
+                await this.updateTagsDisplay();
+            } else {
+                throw new Error(response.error || 'Failed to create group');
+            }
+        } catch (error) {
+            console.error('Failed to create group:', error);
+            alert(`Failed to create group: ${error.message}`);
+        }
+    }
+    
     createTabItem(tab) {
         const tabItem = document.createElement('div');
-        tabItem.className = `tab-item ${tab.suspended || tab.discarded ? 'suspended' : ''}`;
+        let itemClasses = `tab-item ${tab.suspended || tab.discarded ? 'suspended' : ''}`;
+        
+        // Add tag-based styling
+        if (tab.tags && tab.tags.length > 0) {
+            itemClasses += ' has-tags';
+            
+            // Check for frequent tags
+            const hasFrequentTag = tab.tags.some(tag => tag.frequency >= 0.3);
+            if (hasFrequentTag) {
+                itemClasses += ' frequent-tag';
+            }
+            
+            // Check for high priority tags
+            const hasHighPriorityTag = tab.tags.some(tag => tag.priority === 'high');
+            if (hasHighPriorityTag) {
+                itemClasses += ' high-priority-tag';
+            }
+        }
+        
+        tabItem.className = itemClasses;
         
         // Tab icon
         const tabIcon = document.createElement('div');
@@ -200,6 +548,31 @@ class PopupManager {
         }
         
         // Click to switch to tab
+        // Add tag display
+        if (tab.tags && tab.tags.length > 0) {
+            const tabTagsContainer = document.createElement('div');
+            tabTagsContainer.className = 'tab-tags';
+            
+            tab.tags.slice(0, 3).forEach(tag => { // Show max 3 tags
+                const tagElement = document.createElement('span');
+                tagElement.className = 'tab-tag';
+                tagElement.textContent = tag.name;
+                tagElement.style.borderColor = tag.color;
+                tagElement.title = `Frequency: ${(tag.frequency * 100).toFixed(1)}% | Priority: ${tag.priority}`;
+                tabTagsContainer.appendChild(tagElement);
+            });
+            
+            if (tab.tags.length > 3) {
+                const moreTag = document.createElement('span');
+                moreTag.className = 'tab-tag';
+                moreTag.textContent = `+${tab.tags.length - 3}`;
+                moreTag.title = `${tab.tags.length - 3} more tags`;
+                tabTagsContainer.appendChild(moreTag);
+            }
+            
+            tabTitle.appendChild(tabTagsContainer);
+        }
+        
         tabItem.addEventListener('click', () => {
             this.switchToTab(tab.id);
         });

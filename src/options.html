@@ -238,6 +238,73 @@
         </div>
     </div>
     
+    <div class="section">
+        <h2>🏷️ Tag Management</h2>
+        
+        <label>
+            <input type="checkbox" id="tags-enabled"> 
+            Enable tag management system
+        </label>
+        <div class="description">Automatically tag tabs based on domain and usage patterns for better organization</div>
+        
+        <label>
+            <input type="checkbox" id="auto-tagging"> 
+            Enable automatic tagging
+        </label>
+        <div class="description">Automatically suggest and assign tags to new tabs based on their content and domain</div>
+        
+        <label>Tag frequency threshold (%):</label>
+        <div class="range-container">
+            <input type="range" id="tag-frequency-threshold" min="10" max="90" value="30">
+            <span class="range-value" id="tag-frequency-threshold-value">30</span>
+        </div>
+        <div class="description">Tags above this frequency are considered "frequent" and get special treatment</div>
+        
+        <label>
+            <input type="checkbox" id="tag-based-suspension"> 
+            Use tags for suspension decisions
+        </label>
+        <div class="description">Consider tag priority and frequency when deciding which tabs to suspend</div>
+        
+        <label>
+            <input type="checkbox" id="tag-suggestions"> 
+            Enable smart tag suggestions
+        </label>
+        <div class="description">Show suggestions for grouping tabs and creating new tags based on usage patterns</div>
+        
+        <label>Maximum tags per tab:</label>
+        <div class="range-container">
+            <input type="range" id="max-tags-per-tab" min="1" max="10" value="5">
+            <span class="range-value" id="max-tags-per-tab-value">5</span>
+        </div>
+        <div class="description">Limit the number of tags that can be assigned to a single tab</div>
+        
+        <label>Tag inactivity cleanup (days):</label>
+        <div class="range-container">
+            <input type="range" id="tag-inactivity-days" min="7" max="90" value="30">
+            <span class="range-value" id="tag-inactivity-days-value">30</span>
+        </div>
+        <div class="description">Unused tags will be automatically removed after this many days</div>
+        
+        <div class="tag-stats" style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 6px; border-left: 4px solid #2196f3;">
+            <h3 style="margin: 0 0 10px 0; color: #333; font-size: 16px;">📊 Tag Statistics</h3>
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; font-size: 14px;">
+                <div>
+                    <strong>Total Tags:</strong>
+                    <div style="color: #2196f3; font-weight: bold; font-size: 18px;" id="total-tags-count">0</div>
+                </div>
+                <div>
+                    <strong>Frequent Tags:</strong>
+                    <div style="color: #4caf50; font-weight: bold; font-size: 18px;" id="frequent-tags-count">0</div>
+                </div>
+                <div>
+                    <strong>Tagged Tabs:</strong>
+                    <div style="color: #ff9800; font-weight: bold; font-size: 18px;" id="tagged-tabs-count">0</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
     <button id="save">Save Settings</button>
     <span class="save-status" id="save-status"></span>
     
