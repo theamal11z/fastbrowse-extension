@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>FastBrowse Options</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            max-width: 600px;
+            margin: 40px auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #2196F3;
+            padding-bottom: 10px;
+        }
+        
+        .section {
+            margin: 30px 0;
+            padding: 20px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+        }
+        
+        .section h2 {
+            margin-top: 0;
+            color: #555;
+        }
+        
+        label {
+            display: block;
+            margin: 15px 0 5px 0;
+            font-weight: 500;
+        }
+        
+        input[type="number"], input[type="range"] {
+            width: 100px;
+            padding: 6px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        
+        input[type="checkbox"] {
+            margin-right: 8px;
+        }
+        
+        .range-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .range-value {
+            font-weight: bold;
+            color: #2196F3;
+        }
+        
+        button {
+            background: #2196F3;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-top: 20px;
+        }
+        
+        button:hover {
+            background: #1976D2;
+        }
+        
+        .save-status {
+            margin-left: 10px;
+            color: #4CAF50;
+        }
+        
+        .description {
+            font-size: 14px;
+            color: #666;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>FastBrowse Settings</h1>
+    
+    <div class="section">
+        <h2>Memory Management</h2>
+        
+        <label>
+            <input type="checkbox" id="auto-suspend"> 
+            Automatically suspend inactive tabs
+        </label>
+        <div class="description">Tabs will be suspended after a period of inactivity to save memory</div>
+        
+        <label>Suspend tabs after (minutes):</label>
+        <div class="range-container">
+            <input type="range" id="suspend-delay" min="5" max="120" value="30">
+            <span class="range-value" id="suspend-delay-value">30</span>
+        </div>
+        
+        <label>
+            <input type="checkbox" id="memory-threshold"> 
+            Suspend tabs when memory usage is high
+        </label>
+        <div class="description">Automatically suspend tabs when system memory usage exceeds the threshold</div>
+        
+        <label>Memory threshold (%):</label>
+        <div class="range-container">
+            <input type="range" id="memory-limit" min="60" max="95" value="80">
+            <span class="range-value" id="memory-limit-value">80</span>
+        </div>
+    </div>
+    
+    <div class="section">
+        <h2>Tab Protection</h2>
+        
+        <label>
+            <input type="checkbox" id="protect-pinned"> 
+            Never suspend pinned tabs
+        </label>
+        
+        <label>
+            <input type="checkbox" id="protect-audio"> 
+            Never suspend tabs playing audio
+        </label>
+        
+        <label>
+            <input type="checkbox" id="protect-forms"> 
+            Never suspend tabs with unsaved form data
+        </label>
+    </div>
+    
+    <div class="section">
+        <h2>Notifications</h2>
+        
+        <label>
+            <input type="checkbox" id="show-notifications"> 
+            Show notifications when tabs are suspended
+        </label>
+        
+        <label>
+            <input type="checkbox" id="memory-warnings"> 
+            Show warnings when memory usage is high
+        </label>
+    </div>
+    
+    <button id="save">Save Settings</button>
+    <span class="save-status" id="save-status"></span>
+    
+    <script src="options.js"></script>
+</body>
+</html>
