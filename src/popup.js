@@ -7,7 +7,6 @@ class PopupManager {
         this.tabListElement = document.getElementById('tab-list');
         this.suspendAllButton = document.getElementById('suspend-all');
         this.restoreAllButton = document.getElementById('restore-all');
-        this.testSuspendButton = document.getElementById('test-suspend');
         
         this.init();
     }
@@ -25,10 +24,6 @@ class PopupManager {
         
         this.restoreAllButton.addEventListener('click', () => {
             this.restoreAllTabs();
-        });
-        
-        this.testSuspendButton.addEventListener('click', () => {
-            this.testSuspend();
         });
         
         // Refresh data every 5 seconds
@@ -241,36 +236,6 @@ class PopupManager {
         }
     }
     
-    async testSuspend() {
-        try {
-            this.testSuspendButton.disabled = true;
-            this.testSuspendButton.textContent = 'Testing...';
-            
-            const response = await this.sendMessage({ action: 'testSuspend' });
-            
-            if (response.success) {
-                console.log('Test suspend successful:', response.message);
-                // Show success message briefly
-                this.testSuspendButton.textContent = '✓ Done';
-                setTimeout(() => {
-                    this.loadTabList();
-                    this.testSuspendButton.disabled = false;
-                    this.testSuspendButton.textContent = 'Test Suspend';
-                }, 2000);
-            } else {
-                console.log('Test suspend failed:', response.message);
-                this.testSuspendButton.textContent = 'No tabs';
-                setTimeout(() => {
-                    this.testSuspendButton.disabled = false;
-                    this.testSuspendButton.textContent = 'Test Suspend';
-                }, 2000);
-            }
-        } catch (error) {
-            console.error('Failed to test suspend:', error);
-            this.testSuspendButton.disabled = false;
-            this.testSuspendButton.textContent = 'Test Suspend';
-        }
-    }
     
     async switchToTab(tabId) {
         try {

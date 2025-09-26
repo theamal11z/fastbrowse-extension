@@ -461,25 +461,6 @@ class FastBrowse {
                     sendResponse({ success: true });
                     break;
                     
-                case 'testSuspend':
-                    // Force suspend a random non-active tab for testing
-                    console.log('Test suspend triggered');
-                    const allTabs = await chrome.tabs.query({ active: false });
-                    const eligibleTabs = [];
-                    for (const tab of allTabs) {
-                        if (!(await this.shouldProtectTab(tab))) {
-                            eligibleTabs.push(tab);
-                        }
-                    }
-                    if (eligibleTabs.length > 0) {
-                        const testTab = eligibleTabs[0];
-                        console.log(`Test suspending tab: ${testTab.title}`);
-                        await this.suspendTab(testTab.id);
-                        sendResponse({ success: true, message: `Test suspended: ${testTab.title}` });
-                    } else {
-                        sendResponse({ success: false, message: 'No eligible tabs to suspend' });
-                    }
-                    break;
                     
                 case 'updateSettings':
                     console.log('Updating settings:', request.settings);
