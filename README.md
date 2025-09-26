@@ -23,6 +23,8 @@ FastBrowse is a powerful Chrome extension designed to minimize browser memory co
 
 ### 🖥️ Interface & Usability
 - **Clean Interface**: Minimalist popup UI with real-time statistics and focus mode controls
+- **One‑Tap Declutter**: Preview duplicates and stale tabs, then clean up with undo support (Shift+Click for quick preview toast)
+- **Actionable Badge**: See how many quick actions are available at a glance
 - **Memory Usage Display**: Live memory usage monitoring with color-coded indicators
 - **Focus Statistics**: Track focus time and productivity metrics
 - **Auto-Group Tabs button**: One-click analysis to suggest tab groups by domain, tags, usage, or time patterns
@@ -65,7 +67,8 @@ FastBrowse is a powerful Chrome extension designed to minimize browser memory co
 4. **Manually suspend/restore** individual tabs using the buttons
 5. **Suspend all inactive tabs** with one click using "Suspend All Tabs"
 6. **Auto-Group Tabs** using the button in the popup; review suggestions and create groups you like
-7. **Analyze extensions** to identify memory-heavy extensions and get optimization suggestions
+7. **Declutter**: Click to preview duplicates/stale and clean up with Undo, or Shift+Click for a quick preview toast with a Run action
+8. **Analyze extensions** to identify memory-heavy extensions and get optimization suggestions
 
 ### 🎯 Focus Mode Usage
 
@@ -93,6 +96,9 @@ FastBrowse is a powerful Chrome extension designed to minimize browser memory co
 - Adjust common settings quickly:
   - Auto-suspend toggle and delay
   - Smart memory alerts and threshold
+  - Smart mute background audio
+  - Declutter stale threshold (minutes)
+  - Declutter domain whitelist (comma separated)
   - Tags system toggle
   - Focus Mode music selection with Preview
 - Click Save
@@ -154,6 +160,7 @@ FastBrowse uses Chrome Extension Manifest V3 with the following components:
   - `chrome.management` - Extension analysis and recommendations
   - `chrome.scripting` - Dynamic content script injection for focus mode
   - `chrome.offscreen` - Background audio playback for Focus Music (MV3-offscreen document)
+  - `chrome.action` - Badge updates for actionable items
   - `activeTab` - Content script access for focus enhancements
 
 ### Memory Optimization Strategy
@@ -259,6 +266,9 @@ fastbrowse-extension/
 - [ ] Protected tabs (pinned, audio, active) are not suspended
 - [ ] Memory threshold suspension triggers correctly
 - [ ] Smart memory alerts suppress false warnings when Chrome is idle
+- [ ] Smart Mute mutes non-active audible tabs, respects whitelist
+- [ ] Declutter quick preview (Shift+Click) shows counts and “Run” works
+- [ ] Declutter respects stale threshold and domain whitelist
 - [ ] Auto-Group Tabs shows suggestions and Create Group works
 - [ ] Settings (inline) save and load properly
 - [ ] Focus Music: Preview works and music plays/stops with Focus Mode

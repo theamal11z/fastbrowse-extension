@@ -33,6 +33,12 @@ class FastBrowse {
             focusExtensionRecommendations: true,
             // Focus mode audio
             focusModeMusic: 'none', // 'none' or path like assets/music/FocusFlow.mp3
+            // Declutter & audio
+            declutterEnabled: true,
+            declutterStaleMinutes: 120,
+            declutterWhitelist: [],
+            smartMuteEnabled: true,
+            smartMuteWhitelist: ['music.youtube.com','spotify.com','soundcloud.com','meet.google.com','zoom.us'],
             // Tag management settings
             tagsEnabled: true,
             autoTagging: true,
@@ -54,6 +60,9 @@ class FastBrowse {
         // Smart memory tracking
         this.highMemStreak = 0;
         this.lastChromeFocusAt = 0;
+        
+        // Declutter snapshot for undo
+        this.lastDeclutterSnapshot = null;
         
         // Focus mode state
         this.focusModeActive = false;
@@ -252,6 +261,12 @@ class FastBrowse {
     }
     
     async onTabUpdated(tabId, changeInfo, tab) {
+        // Smart mute evaluation on audio state changes
+        if (this.settings.smartMuteEnabled && (changeInfo.audible !== undefined || changeInfo.status === 'complete')) {
+            try { await this.smartMuteEvaluate(tab); } catch (e) { console.debug('smartMuteEvaluate failed:', e); }
+        }
+        // Badge update
+        this.updateActionBadge().catch(() => {});
         // Handle tab loading states
         if (changeInfo.status === 'loading') {
             this.clearTabTimer(tabId);
@@ -264,6 +279,7 @@ class FastBrowse {
     }
     
     onTabRemoved(tabId) {
+        this.updateActionBadge().catch(() => {});
         this.clearTabTimer(tabId);
         this.suspendedTabs.delete(tabId);
         
@@ -278,6 +294,8 @@ class FastBrowse {
     }
     
     async onWindowFocusChanged(windowId) {
+        // Update badge too
+        this.updateActionBadge().catch(() => {});
         // Track last time any Chrome window gained focus (used for smart memory gating)
         if (windowId !== chrome.windows.WINDOW_ID_NONE) {
             this.lastChromeFocusAt = Date.now();
@@ -628,6 +646,8 @@ class FastBrowse {
     }
     
     startExtensionMonitoring() {
+        // Periodically refresh badge
+        setInterval(() => { this.updateActionBadge().catch(() => {}); }, 60000);
         // Check extensions every 5 minutes
         setInterval(() => {
             this.checkExtensionMemoryUsage();
@@ -1807,6 +1827,155 @@ class FastBrowse {
         }
     }
     
+    // Smart Mute helpers
+    async smartMuteEvaluate(tab) {
+        try {
+            if (!tab || !tab.id) return;
+            if (!this.settings.smartMuteEnabled) return;
+            const active = tab.active === true;
+            const audible = tab.audible === true;
+            const url = tab.url || '';
+            const whitelisted = this.isDomainWhitelisted(url, this.settings.smartMuteWhitelist || []);
+            if (audible && !active && !whitelisted && !tab.mutedInfo?.muted) {
+                await chrome.tabs.update(tab.id, { muted: true });
+            }
+            if (active && tab.mutedInfo?.muted && whitelisted) {
+                await chrome.tabs.update(tab.id, { muted: false });
+            }
+        } catch (_) {}
+    }
+
+    isDomainWhitelisted(url, whitelist) {
+        try {
+            const u = new URL(url);
+            return (whitelist || []).some(d => u.hostname.includes(d));
+        } catch (_) {
+            return false;
+        }
+    }
+
+    isDomainInList(url, list) {
+        try {
+            const u = new URL(url);
+            return (list || []).some(d => u.hostname.includes(d));
+        } catch (_) {
+            return false;
+        }
+    }
+        try {
+            const u = new URL(url);
+            return whitelist.some(d => u.hostname.includes(d));
+        } catch (_) {
+            return false;
+        }
+    }
+
+    // Declutter analysis and actions
+    normalizeUrlForDuplicates(urlStr) {
+        try {
+            const u = new URL(urlStr);
+            u.hash = '';
+            return u.toString();
+        } catch (_) {
+            return urlStr || '';
+        }
+    }
+
+    async analyzeDeclutter() {
+        if (!this.settings.declutterEnabled) {
+            return { duplicates: [], stale: [], counts: { duplicates: 0, stale: 0 } };
+        }
+        const tabs = await chrome.tabs.query({});
+        const map = new Map();
+        const duplicates = [];
+        const now = Date.now();
+        const staleCutoff = now - (this.settings.declutterStaleMinutes * 60 * 1000);
+        const stale = [];
+
+        for (const tab of tabs) {
+            if (!tab.url || tab.pinned) continue;
+            if (this.isDomainInList(tab.url, this.settings.declutterWhitelist)) continue;
+            const key = this.normalizeUrlForDuplicates(tab.url);
+            if (map.has(key)) {
+                const kept = map.get(key);
+                const older = (tab.lastAccessed || 0) < (kept.lastAccessed || 0) ? tab : kept;
+                const newer = older === tab ? kept : tab;
+                if (!older.active && !older.audible) {
+                    duplicates.push({ tabId: older.id, title: older.title, url: older.url, windowId: older.windowId });
+                }
+                map.set(key, newer);
+            } else {
+                map.set(key, tab);
+            }
+        }
+
+        for (const tab of tabs) {
+            if (tab.active || tab.pinned) continue;
+            if (this.isDomainInList(tab.url, this.settings.declutterWhitelist)) continue;
+            if ((tab.lastAccessed || 0) < staleCutoff) {
+                if (!(await this.shouldProtectTab(tab))) {
+                    stale.push({ tabId: tab.id, title: tab.title, url: tab.url, windowId: tab.windowId });
+                }
+            }
+        }
+        return { duplicates, stale, counts: { duplicates: duplicates.length, stale: stale.length } };
+    }
+
+    async performDeclutter({ closeDuplicates = true, suspendStale = true } = {}) {
+        const preview = await this.analyzeDeclutter();
+        this.lastDeclutterSnapshot = {
+            time: Date.now(),
+            closedTabs: [],
+            suspended: []
+        };
+        if (closeDuplicates) {
+            for (const dup of preview.duplicates) {
+                try {
+                    const tab = await chrome.tabs.get(dup.tabId);
+                    this.lastDeclutterSnapshot.closedTabs.push({ url: tab.url, windowId: tab.windowId, index: tab.index, pinned: tab.pinned, active: tab.active });
+                    await chrome.tabs.remove(tab.id);
+                } catch (_) {}
+            }
+        }
+        if (suspendStale) {
+            for (const st of preview.stale) {
+                try {
+                    await this.suspendTab(st.tabId);
+                    this.lastDeclutterSnapshot.suspended.push(st.tabId);
+                } catch (_) {}
+            }
+        }
+        await this.updateActionBadge();
+        return preview.counts;
+    }
+
+    async undoDeclutter() {
+        if (!this.lastDeclutterSnapshot) return false;
+        for (const t of this.lastDeclutterSnapshot.closedTabs) {
+            try {
+                await chrome.tabs.create({ url: t.url, windowId: t.windowId, index: t.index, active: false });
+            } catch (_) {}
+        }
+        for (const id of this.lastDeclutterSnapshot.suspended) {
+            try { await this.restoreTab(id); } catch (_) {}
+        }
+        this.lastDeclutterSnapshot = null;
+        await this.updateActionBadge();
+        return true;
+    }
+
+    async updateActionBadge() {
+        try {
+            const { counts } = await this.analyzeDeclutter();
+            const num = (counts.duplicates + counts.stale);
+            const text = num > 0 ? String(num) : '';
+            await chrome.action.setBadgeText({ text });
+            if (num > 0) {
+                await chrome.action.setBadgeBackgroundColor({ color: '#2196F3' });
+            }
+        } catch (_) {}
+    }
+
     // Focus Mode Implementation
     async ensureOffscreen() {
         try {
@@ -2279,6 +2448,36 @@ class FastBrowse {
                     }
                     break;
                     
+                case 'declutterPreview':
+                    try {
+                        const result = await this.analyzeDeclutter();
+                        sendResponse({ success: true, data: result });
+                    } catch (error) {
+                        console.error('Declutter preview failed:', error);
+                        sendResponse({ success: false, error: error.message });
+                    }
+                    break;
+
+                case 'declutterExecute':
+                    try {
+                        const counts = await this.performDeclutter(request.options || {});
+                        sendResponse({ success: true, data: counts });
+                    } catch (error) {
+                        console.error('Declutter execute failed:', error);
+                        sendResponse({ success: false, error: error.message });
+                    }
+                    break;
+
+                case 'declutterUndo':
+                    try {
+                        const ok = await this.undoDeclutter();
+                        sendResponse({ success: ok });
+                    } catch (error) {
+                        console.error('Declutter undo failed:', error);
+                        sendResponse({ success: false, error: error.message });
+                    }
+                    break;
+
                 // Tag management actions
                 case 'getAllTags':
                     const allTags = this.getAllTagsSorted();

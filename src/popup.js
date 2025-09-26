@@ -8,6 +8,7 @@ class PopupManager {
         this.suspendAllButton = document.getElementById('suspend-all');
         this.restoreAllButton = document.getElementById('restore-all');
         this.autoGroupTabsMainButton = document.getElementById('auto-group-tabs-main');
+        this.declutterButton = document.getElementById('declutter');
         
         // Extension monitoring elements
         this.analyzeExtensionsButton = document.getElementById('analyze-extensions');
@@ -49,7 +50,19 @@ class PopupManager {
         this.setMemoryLimit = document.getElementById('set-memory-limit');
         this.setMemoryLimitValue = document.getElementById('set-memory-limit-value');
         this.setTagsEnabled = document.getElementById('set-tags-enabled');
+        this.setSmartMute = document.getElementById('set-smart-mute');
+        this.setDeclutterStale = document.getElementById('set-declutter-stale');
+        this.setDeclutterStaleValue = document.getElementById('set-declutter-stale-value');
+        this.setDeclutterWhitelist = document.getElementById('set-declutter-whitelist');
         this.setFocusMusic = document.getElementById('set-focus-music');
+
+        // Declutter modal elements
+        this.declutterModal = document.getElementById('declutter-modal');
+        this.declutterSummary = document.getElementById('declutter-summary');
+        this.declutterDuplicates = document.getElementById('declutter-duplicates');
+        this.declutterStale = document.getElementById('declutter-stale');
+        this.declutterExecuteButton = document.getElementById('declutter-execute');
+        this.declutterCancelButton = document.getElementById('declutter-cancel');
         this.previewFocusMusicButton = document.getElementById('preview-focus-music');
         
         // Toasts
@@ -84,6 +97,16 @@ class PopupManager {
         if (this.autoGroupTabsMainButton) {
             this.autoGroupTabsMainButton.addEventListener('click', () => {
                 this.autoGroupTabs(this.autoGroupTabsMainButton);
+            });
+        }
+        if (this.declutterButton) {
+            this.declutterButton.title = 'Declutter tabs (Shift+Click for quick preview)';
+            this.declutterButton.addEventListener('click', (e) => {
+                if (e.shiftKey) {
+                    this.quickDeclutterToast();
+                } else {
+                    this.openDeclutterPreview();
+                }
             });
         }
         
@@ -159,8 +182,24 @@ class PopupManager {
         if (this.saveSettingsButton) {
             this.saveSettingsButton.addEventListener('click', () => this.saveInlineSettings());
         }
+        if (this.setDeclutterStale) {
+            this.setDeclutterStale.addEventListener('input', () => {
+                this.setDeclutterStaleValue.textContent = this.setDeclutterStale.value;
+            });
+        }
         if (this.previewFocusMusicButton) {
             this.previewFocusMusicButton.addEventListener('click', () => this.previewFocusMusic());
+        }
+        if (this.declutterExecuteButton) {
+            this.declutterExecuteButton.addEventListener('click', () => this.executeDeclutter());
+        }
+        if (this.declutterCancelButton) {
+            this.declutterCancelButton.addEventListener('click', () => this.closeDeclutterModal());
+        }
+        if (this.declutterModal) {
+            this.declutterModal.addEventListener('click', (e) => {
+                if (e.target === this.declutterModal) this.closeDeclutterModal();
+            });
         }
         
         // Refresh data every 5 seconds
@@ -755,6 +794,15 @@ class PopupManager {
                     this.setMemoryLimitValue.textContent = s.memoryLimit;
                 }
                 if (this.setTagsEnabled) this.setTagsEnabled.checked = s.tagsEnabled;
+                if (this.setSmartMute) this.setSmartMute.checked = s.smartMuteEnabled !== false;
+                if (this.setDeclutterStale) {
+                    this.setDeclutterStale.value = s.declutterStaleMinutes ?? 120;
+                    this.setDeclutterStaleValue.textContent = this.setDeclutterStale.value;
+                }
+                if (this.setDeclutterWhitelist) {
+                    const list = Array.isArray(s.declutterWhitelist) ? s.declutterWhitelist : [];
+                    this.setDeclutterWhitelist.value = list.join(', ');
+                }
 
                 // Build music list (fallback to known tracks, try optional tracks.json)
                 const defaultTracks = [
@@ -785,6 +833,80 @@ class PopupManager {
         }
     }
 
+    async quickDeclutterToast() {
+        try {
+            const resp = await this.sendMessage({ action: 'declutterPreview' });
+            if (!resp.success) throw new Error(resp.error || 'Preview failed');
+            const { counts } = resp.data;
+            const msg = `Declutter candidates: ${counts.duplicates} duplicates, ${counts.stale} stale`;
+            this.showActionToast(msg, counts.duplicates + counts.stale > 0 ? 'success' : 'info',
+                counts.duplicates + counts.stale > 0 ? 'Run' : null,
+                () => this.executeDeclutter()
+            );
+        } catch (e) {
+            console.error('Quick declutter failed:', e);
+            this.showToast('Quick declutter failed', 'error');
+        }
+    }
+
+    async openDeclutterPreview() {
+        try {
+            const resp = await this.sendMessage({ action: 'declutterPreview' });
+            if (!resp.success) throw new Error(resp.error || 'Preview failed');
+            const { counts, duplicates, stale } = resp.data;
+            this.declutterSummary.textContent = `${counts.duplicates} duplicate tabs, ${counts.stale} stale tabs found`;
+            this.declutterDuplicates.innerHTML = '';
+            duplicates.slice(0, 50).forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'declutter-item';
+                div.textContent = `${item.title || 'Untitled'} — ${item.url}`;
+                this.declutterDuplicates.appendChild(div);
+            });
+            this.declutterStale.innerHTML = '';
+            stale.slice(0, 50).forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'declutter-item';
+                div.textContent = `${item.title || 'Untitled'} — ${item.url}`;
+                this.declutterStale.appendChild(div);
+            });
+            this.declutterModal.style.display = 'flex';
+        } catch (e) {
+            console.error('Declutter preview failed:', e);
+            this.showToast('Failed to generate declutter preview', 'error');
+        }
+    }
+
+    closeDeclutterModal() {
+        if (this.declutterModal) this.declutterModal.style.display = 'none';
+    }
+
+    async executeDeclutter() {
+        try {
+            this.declutterExecuteButton.disabled = true;
+            const resp = await this.sendMessage({ action: 'declutterExecute', options: { closeDuplicates: true, suspendStale: true } });
+            if (!resp.success) throw new Error(resp.error || 'Declutter failed');
+            this.showToast('Declutter complete. Undo available for a short time.', 'success');
+            this.closeDeclutterModal();
+            // Offer undo via a temporary inline button
+            const undoBtn = document.createElement('button');
+            undoBtn.textContent = 'Undo Declutter';
+            undoBtn.className = 'secondary';
+            undoBtn.style.marginLeft = '8px';
+            this.declutterButton.insertAdjacentElement('afterend', undoBtn);
+            const removeUndo = () => { if (undoBtn && undoBtn.parentNode) undoBtn.parentNode.removeChild(undoBtn); };
+            undoBtn.addEventListener('click', async () => {
+                try { await this.sendMessage({ action: 'declutterUndo' }); this.showToast('Declutter undone', 'success'); } catch (_) {}
+                removeUndo();
+            });
+            setTimeout(removeUndo, 15000);
+        } catch (e) {
+            console.error('Declutter execution failed:', e);
+            this.showToast('Declutter failed', 'error');
+        } finally {
+            this.declutterExecuteButton.disabled = false;
+        }
+    }
+
     async previewFocusMusic() {
         try {
             const track = this.setFocusMusic ? this.setFocusMusic.value : 'none';
@@ -810,6 +932,13 @@ class PopupManager {
             if (this.setMemorySmartMode) newSettings.memorySmartMode = this.setMemorySmartMode.checked;
             if (this.setMemoryLimit) newSettings.memoryLimit = parseInt(this.setMemoryLimit.value);
             if (this.setTagsEnabled) newSettings.tagsEnabled = this.setTagsEnabled.checked;
+            if (this.setSmartMute) newSettings.smartMuteEnabled = this.setSmartMute.checked;
+            if (this.setDeclutterStale) newSettings.declutterStaleMinutes = parseInt(this.setDeclutterStale.value);
+            if (this.setDeclutterWhitelist) {
+                const raw = this.setDeclutterWhitelist.value || '';
+                const list = raw.split(',').map(s => s.trim()).filter(Boolean);
+                newSettings.declutterWhitelist = list;
+            }
             if (this.setFocusMusic) newSettings.focusModeMusic = this.setFocusMusic.value;
             
             const response = await this.sendMessage({ action: 'updateSettings', settings: newSettings });
@@ -1125,6 +1254,42 @@ class PopupManager {
     }
     
     // Toast helper
+    showActionToast(message, type = 'info', actionLabel = null, actionHandler = null, timeout = 4000) {
+        try {
+            if (!this.toastContainer) return;
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            const span = document.createElement('span');
+            span.textContent = message;
+            toast.appendChild(span);
+            if (actionLabel && typeof actionHandler === 'function') {
+                const actBtn = document.createElement('button');
+                actBtn.className = 'toast-close';
+                actBtn.style.marginLeft = '8px';
+                actBtn.textContent = actionLabel;
+                actBtn.addEventListener('click', () => {
+                    actionHandler();
+                    if (this.toastContainer.contains(toast)) this.toastContainer.removeChild(toast);
+                });
+                toast.appendChild(actBtn);
+            }
+            const closeBtn = document.createElement('button');
+            closeBtn.className = 'toast-close';
+            closeBtn.textContent = '×';
+            closeBtn.addEventListener('click', () => {
+                if (this.toastContainer.contains(toast)) {
+                    this.toastContainer.removeChild(toast);
+                }
+            });
+            toast.appendChild(closeBtn);
+            this.toastContainer.appendChild(toast);
+            setTimeout(() => {
+                if (this.toastContainer.contains(toast)) {
+                    this.toastContainer.removeChild(toast);
+                }
+            }, timeout);
+        } catch (e) { console.warn('Action toast failed:', e); }
+    }
     showToast(message, type = 'info', timeout = 3000) {
         try {
             if (!this.toastContainer) return;
