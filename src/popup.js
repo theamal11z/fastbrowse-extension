@@ -7,6 +7,16 @@ class PopupManager {
         this.tabListElement = document.getElementById('tab-list');
         this.suspendAllButton = document.getElementById('suspend-all');
         this.restoreAllButton = document.getElementById('restore-all');
+        this.restoreAllLiteButton = document.getElementById('restore-all-lite');
+        this.toggleRestorationModeButton = document.getElementById('toggle-restoration-mode');
+        this.restorationStatusElement = document.getElementById('restoration-status');
+        this.currentRestorationModeElement = document.getElementById('current-restoration-mode');
+        this.restorationProgressElement = document.getElementById('restoration-progress');
+        this.liteRestorationsElement = document.getElementById('lite-restorations');
+        this.restorationMemoryFillElement = document.getElementById('restoration-memory-fill');
+        this.restorationMemoryPercentElement = document.getElementById('restoration-memory-percent');
+        this.restorationThresholdLineElement = document.getElementById('restoration-threshold-line');
+        this.restorationModeIconElement = document.getElementById('restoration-mode-icon');
         this.autoGroupTabsMainButton = document.getElementById('auto-group-tabs-main');
         this.declutterButton = document.getElementById('declutter');
         
@@ -82,15 +92,28 @@ class PopupManager {
         this.currentTabs = [];
         this.allTags = [];
         
+        // Restoration state
+        this.currentRestorationMode = 'smart'; // 'smart', 'lite', 'full'
+        this.restorationStats = null;
+        this.restorationUpdateInterval = null;
+        
         this.init();
     }
     
     async init() {
-        await this.loadMemoryInfo();
-        await this.loadTabList();
-        await this.loadFocusState();
-        await this.loadTagData();
-        this.setupEventListeners();
+        try {
+            await this.loadMemoryInfo();
+            await this.loadTabList();
+            await this.loadFocusState();
+            await this.loadTagData();
+            await this.loadRestorationState();
+            this.setupEventListeners();
+            this.startRestorationMonitoring();
+        } catch (error) {
+            console.error('Failed to initialize popup:', error);
+            // Still setup event listeners even if other initialization fails
+            this.setupEventListeners();
+        }
     }
     
     setupEventListeners() {
@@ -101,6 +124,18 @@ class PopupManager {
         this.restoreAllButton.addEventListener('click', () => {
             this.restoreAllTabs();
         });
+        
+        if (this.restoreAllLiteButton) {
+            this.restoreAllLiteButton.addEventListener('click', () => {
+                this.restoreAllTabsLite();
+            });
+        }
+        
+        if (this.toggleRestorationModeButton) {
+            this.toggleRestorationModeButton.addEventListener('click', () => {
+                this.cycleRestorationMode();
+            });
+        }
         
         if (this.autoGroupTabsMainButton) {
             this.autoGroupTabsMainButton.addEventListener('click', () => {
@@ -717,7 +752,8 @@ class PopupManager {
         tabItem.appendChild(tabTitle);
         tabItem.appendChild(tabActions);
         
-        return tabItem;
+        // Enhance for memory-aware restoration
+        return this.enhanceTabItemForRestoration(tabItem, tab);
     }
     
     async suspendTab(tabId) {
@@ -729,10 +765,15 @@ class PopupManager {
         }
     }
     
-    async restoreTab(tabId) {
+    async restoreTab(tabId, mode = null) {
         try {
-            await this.sendMessage({ action: 'restoreTab', tabId: tabId });
-            setTimeout(() => this.loadTabList(), 500); // Refresh after a delay
+            const action = mode === 'lite' ? 'restoreTabLite' : 
+                          mode === 'full' ? 'restoreTabFull' : 'restoreTab';
+            await this.sendMessage({ action, tabId, options: { forceMode: mode } });
+            setTimeout(() => {
+                this.loadTabList();
+                this.updateRestorationStatus();
+            }, 500); // Refresh after a delay
         } catch (error) {
             console.error('Failed to restore tab:', error);
         }
@@ -762,10 +803,18 @@ class PopupManager {
             this.restoreAllButton.disabled = true;
             this.restoreAllButton.textContent = 'Restoring...';
             
-            await this.sendMessage({ action: 'restoreAllTabs' });
+            // Use current restoration mode settings
+            const options = this.currentRestorationMode === 'lite' ? { forceMode: 'lite' } :
+                           this.currentRestorationMode === 'full' ? { forceMode: 'full' } : {};
+            
+            await this.sendMessage({ action: 'restoreAllTabs', options });
+            
+            // Show restoration status during operation
+            this.showRestorationStatus();
             
             setTimeout(() => {
                 this.loadTabList();
+                this.updateRestorationStatus();
                 this.restoreAllButton.disabled = false;
                 this.restoreAllButton.textContent = 'Restore All';
             }, 1000);
@@ -773,6 +822,31 @@ class PopupManager {
             console.error('Failed to restore all tabs:', error);
             this.restoreAllButton.disabled = false;
             this.restoreAllButton.textContent = 'Restore All';
+        }
+    }
+    
+    async restoreAllTabsLite() {
+        try {
+            this.restoreAllLiteButton.disabled = true;
+            this.restoreAllLiteButton.textContent = 'Restoring...';
+            
+            await this.sendMessage({ 
+                action: 'restoreAllTabs', 
+                options: { forceMode: 'lite' }
+            });
+            
+            this.showRestorationStatus();
+            
+            setTimeout(() => {
+                this.loadTabList();
+                this.updateRestorationStatus();
+                this.restoreAllLiteButton.disabled = false;
+                this.restoreAllLiteButton.textContent = 'Restore (Lite)';
+            }, 1000);
+        } catch (error) {
+            console.error('Failed to restore all tabs in lite mode:', error);
+            this.restoreAllLiteButton.disabled = false;
+            this.restoreAllLiteButton.textContent = 'Restore (Lite)';
         }
     }
     
@@ -1428,16 +1502,237 @@ class PopupManager {
         }
     }
 
+    // Memory-Aware Restoration Methods
+    async loadRestorationState() {
+        try {
+            // Load restoration stats
+            const statsResponse = await this.sendMessage({ action: 'getRestorationStats' });
+            if (statsResponse && statsResponse.success) {
+                this.restorationStats = statsResponse.data;
+            }
+            
+            // Load current memory state
+            await this.updateMemoryForRestoration();
+            
+            // Update UI
+            this.updateRestorationModeUI();
+            
+        } catch (error) {
+            console.error('Failed to load restoration state:', error);
+            // Initialize with default values if connection fails
+            this.restorationStats = {
+                totalRestored: 0,
+                liteRestorations: 0,
+                memoryOptimized: 0,
+                activeRestorations: 0
+            };
+            this.updateRestorationModeUI();
+        }
+    }
+    
+    async updateRestorationStatus() {
+        try {
+            const [statsResponse, memoryResponse] = await Promise.allSettled([
+                this.sendMessage({ action: 'getRestorationStats' }).catch(e => ({ success: false, error: e.message })),
+                this.sendMessage({ action: 'getMemoryInfo' }).catch(e => ({ success: false, error: e.message }))
+            ]);
+            
+            // Handle restoration stats response
+            if (statsResponse.status === 'fulfilled' && statsResponse.value.success) {
+                this.restorationStats = statsResponse.value.data;
+            }
+            
+            // Handle memory response
+            if (memoryResponse.status === 'fulfilled' && memoryResponse.value.success && this.restorationMemoryFillElement) {
+                const memoryInfo = memoryResponse.value.data;
+                const usagePercent = ((memoryInfo.capacity - memoryInfo.availableCapacity) / memoryInfo.capacity) * 100;
+                
+                this.restorationMemoryFillElement.style.width = `${usagePercent}%`;
+                this.restorationMemoryPercentElement.textContent = `${usagePercent.toFixed(1)}%`;
+            }
+            
+            this.updateRestorationStatsUI();
+            
+        } catch (error) {
+            console.error('Failed to update restoration status:', error);
+        }
+    }
+    
+    async updateMemoryForRestoration() {
+        try {
+            const response = await this.sendMessage({ action: 'getMemoryInfo' });
+            if (response.success && this.restorationMemoryFillElement) {
+                const memoryInfo = response.data;
+                const usagePercent = ((memoryInfo.capacity - memoryInfo.availableCapacity) / memoryInfo.capacity) * 100;
+                
+                this.restorationMemoryFillElement.style.width = `${usagePercent}%`;
+                this.restorationMemoryPercentElement.textContent = `${usagePercent.toFixed(1)}%`;
+                
+                // Update threshold line position based on settings
+                const settings = await this.sendMessage({ action: 'getSettings' });
+                if (settings.success) {
+                    const threshold = settings.data.liteRestorationThreshold || 75;
+                    this.restorationThresholdLineElement.style.left = `${threshold}%`;
+                }
+            }
+        } catch (error) {
+            console.error('Failed to update memory for restoration:', error);
+        }
+    }
+    
+    cycleRestorationMode() {
+        const modes = ['smart', 'lite', 'full'];
+        const currentIndex = modes.indexOf(this.currentRestorationMode);
+        const nextIndex = (currentIndex + 1) % modes.length;
+        this.currentRestorationMode = modes[nextIndex];
+        
+        this.updateRestorationModeUI();
+        this.showToast(`Restoration mode: ${this.currentRestorationMode}`, 'info');
+    }
+    
+    updateRestorationModeUI() {
+        if (!this.currentRestorationModeElement) return;
+        
+        // Update mode text and icon
+        this.currentRestorationModeElement.textContent = this.currentRestorationMode;
+        
+        const modeIcons = {
+            'smart': '🧠',  // brain
+            'lite': '⚡',   // lightning
+            'full': '🚀'    // rocket
+        };
+        
+        if (this.restorationModeIconElement) {
+            this.restorationModeIconElement.textContent = modeIcons[this.currentRestorationMode];
+        }
+        
+        // Update button titles
+        const descriptions = {
+            'smart': 'Smart mode - automatically chooses best restoration method',
+            'lite': 'Lite mode - always restore with memory optimization',
+            'full': 'Full mode - always restore without restrictions'
+        };
+        
+        if (this.toggleRestorationModeButton) {
+            this.toggleRestorationModeButton.title = descriptions[this.currentRestorationMode];
+        }
+    }
+    
+    updateRestorationStatsUI() {
+        if (!this.restorationStats || !this.restorationProgressElement) return;
+        
+        this.restorationProgressElement.textContent = 
+            `${this.restorationStats.totalRestored || 0}/${this.restorationStats.totalRestored || 0}`;
+        
+        if (this.liteRestorationsElement) {
+            this.liteRestorationsElement.textContent = this.restorationStats.liteRestorations || 0;
+        }
+    }
+    
+    showRestorationStatus() {
+        if (this.restorationStatusElement) {
+            this.restorationStatusElement.style.display = 'block';
+        }
+    }
+    
+    hideRestorationStatus() {
+        if (this.restorationStatusElement) {
+            this.restorationStatusElement.style.display = 'none';
+        }
+    }
+    
+    startRestorationMonitoring() {
+        // Update restoration status every 2 seconds during active operations
+        this.restorationUpdateInterval = setInterval(() => {
+            try {
+                if (this.restorationStats && this.restorationStats.activeRestorations > 0) {
+                    this.updateRestorationStatus().catch(error => {
+                        console.debug('Restoration status update failed:', error);
+                    });
+                }
+            } catch (error) {
+                console.debug('Restoration monitoring error:', error);
+            }
+        }, 2000);
+    }
+    
+    // Enhanced tab item creation to include restoration indicators
+    enhanceTabItemForRestoration(tabItem, tab) {
+        // Add restoration indicator
+        const indicator = document.createElement('div');
+        indicator.className = 'restoration-indicator';
+        tabItem.appendChild(indicator);
+        
+        // Check if tab is in lite mode (with proper error handling)
+        chrome.tabs.sendMessage(tab.id, { action: 'getLiteModeStatus' }, (response) => {
+            if (chrome.runtime.lastError) {
+                // Ignore connection errors for tabs without content script
+                console.debug('Tab', tab.id, 'does not have lite mode content script loaded');
+                return;
+            }
+            if (response && response.success && response.data.active) {
+                tabItem.classList.add('lite-mode');
+            }
+        });
+        
+        // Add restoration mode controls to tab actions
+        const tabActions = tabItem.querySelector('.tab-actions');
+        if (tabActions && (tab.suspended || tab.discarded)) {
+            // Replace simple restore with mode-aware restore
+            const existingRestore = tabActions.querySelector('button');
+            if (existingRestore && existingRestore.textContent === 'Restore') {
+                existingRestore.remove();
+                
+                // Add restore dropdown or multiple buttons based on space
+                const restoreBtn = document.createElement('button');
+                restoreBtn.textContent = 'Restore';
+                restoreBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.restoreTab(tab.id, this.currentRestorationMode === 'smart' ? null : this.currentRestorationMode);
+                });
+                
+                const liteBtn = document.createElement('button');
+                liteBtn.textContent = '⚡';
+                liteBtn.className = 'secondary';
+                liteBtn.title = 'Restore in lite mode';
+                liteBtn.style.fontSize = '10px';
+                liteBtn.style.padding = '2px 4px';
+                liteBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.restoreTab(tab.id, 'lite');
+                });
+                
+                tabActions.appendChild(restoreBtn);
+                tabActions.appendChild(liteBtn);
+            }
+        }
+        
+        return tabItem;
+    }
+
     sendMessage(message) {
         return new Promise((resolve, reject) => {
             try {
                 chrome.runtime.sendMessage(message, (response) => {
                     if (chrome.runtime.lastError) {
-                        console.error('Runtime error:', chrome.runtime.lastError);
-                        reject(chrome.runtime.lastError);
+                        console.error('Runtime error:', chrome.runtime.lastError.message);
+                        // Try to provide a fallback response for some actions
+                        if (message.action === 'getRestorationStats') {
+                            resolve({ 
+                                success: true, 
+                                data: { totalRestored: 0, liteRestorations: 0, memoryOptimized: 0, activeRestorations: 0 }
+                            });
+                        } else {
+                            reject(chrome.runtime.lastError);
+                        }
                     } else if (!response) {
-                        console.error('No response received');
-                        reject(new Error('No response from background script'));
+                        console.warn('No response received for action:', message.action);
+                        // Provide fallback responses for non-critical actions
+                        if (message.action === 'getRestorationStats' || message.action === 'getTabPriorities') {
+                            resolve({ success: true, data: {} });
+                        } else {
+                            reject(new Error('No response from background script'));
+                        }
                     } else {
                         resolve(response);
                     }

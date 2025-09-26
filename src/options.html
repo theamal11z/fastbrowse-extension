@@ -311,6 +311,91 @@
         </div>
     </div>
     
+    <div class="section">
+        <h2>🧠 Memory-Aware Restoration</h2>
+        
+        <label>
+            <input type="checkbox" id="memory-aware-restoration"> 
+            Enable memory-aware tab restoration
+        </label>
+        <div class="description">Smart tab restoration that prioritizes content over heavy media and considers memory usage</div>
+        
+        <label>Lite mode memory threshold (%):</label>
+        <div class="range-container">
+            <input type="range" id="lite-restoration-threshold" min="50" max="90" value="75">
+            <span class="range-value" id="lite-restoration-threshold-value">75</span>
+        </div>
+        <div class="description">When memory usage exceeds this threshold, tabs will be restored in lite mode</div>
+        
+        <label>
+            <input type="checkbox" id="progressive-restoration-enabled"> 
+            Enable progressive restoration
+        </label>
+        <div class="description">Restore tabs gradually with delays between batches to prevent memory spikes</div>
+        
+        <label>Progressive restoration delay (ms):</label>
+        <div class="range-container">
+            <input type="range" id="progressive-restoration-delay" min="500" max="5000" step="250" value="1000">
+            <span class="range-value" id="progressive-restoration-delay-value">1000</span>
+        </div>
+        <div class="description">Delay between restoring batches of tabs during progressive restoration</div>
+        
+        <label>
+            <input type="checkbox" id="prioritize-content-over-media"> 
+            Prioritize content over heavy media
+        </label>
+        <div class="description">Automatically use lite mode for media-heavy sites (YouTube, social media, etc.)</div>
+        
+        <label>
+            <input type="checkbox" id="lite-restoration-default"> 
+            Use lite mode as default
+        </label>
+        <div class="description">Always restore tabs in lite mode unless explicitly requested otherwise</div>
+        
+        <label>Restoration priority mode:</label>
+        <select id="restoration-priority-mode" style="padding: 6px; border: 1px solid #ddd; border-radius: 4px; width: 150px;">
+            <option value="smart">Smart (recommended)</option>
+            <option value="manual">Manual</option>
+            <option value="all">Restore All</option>
+        </select>
+        <div class="description">Smart: prioritize by tags and usage; Manual: user controls order; All: restore everything</div>
+        
+        <label>Maximum concurrent restorations:</label>
+        <div class="range-container">
+            <input type="range" id="max-concurrent-restorations" min="1" max="10" value="3">
+            <span class="range-value" id="max-concurrent-restorations-value">3</span>
+        </div>
+        <div class="description">Number of tabs that can be restored simultaneously</div>
+        
+        <label>Memory buffer for restoration (%):</label>
+        <div class="range-container">
+            <input type="range" id="restoration-memory-buffer" min="2" max="15" value="5">
+            <span class="range-value" id="restoration-memory-buffer-value">5</span>
+        </div>
+        <div class="description">Memory buffer to maintain during restoration operations</div>
+        
+        <div class="restoration-stats" style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 6px; border-left: 4px solid #ff9800;">
+            <h3 style="margin: 0 0 10px 0; color: #333; font-size: 16px;">📊 Restoration Statistics</h3>
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; font-size: 14px;">
+                <div>
+                    <strong>Total Restored:</strong>
+                    <div style="color: #ff9800; font-weight: bold; font-size: 18px;" id="total-restored-count">0</div>
+                </div>
+                <div>
+                    <strong>Lite Restorations:</strong>
+                    <div style="color: #4caf50; font-weight: bold; font-size: 18px;" id="lite-restored-count">0</div>
+                </div>
+                <div>
+                    <strong>Memory Optimized:</strong>
+                    <div style="color: #2196f3; font-weight: bold; font-size: 18px;" id="memory-optimized-count">0</div>
+                </div>
+            </div>
+            <div style="margin-top: 10px; font-size: 12px; color: #666;">
+                Last restoration: <span id="last-restoration-time">Never</span>
+            </div>
+        </div>
+    </div>
+    
     <button id="save">Save Settings</button>
     <span class="save-status" id="save-status"></span>
     

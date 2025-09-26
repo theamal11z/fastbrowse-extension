@@ -663,6 +663,110 @@
         .tab-item.high-priority-tag {
             border-left: 3px solid #f44336;
         }
+        
+        /* Restoration controls styles */
+        .restore-controls {
+            display: flex;
+            gap: 4px;
+            align-items: center;
+        }
+        
+        .restoration-status {
+            background: #f8f9fa;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            padding: 8px 12px;
+            margin: 8px 0;
+            font-size: 12px;
+        }
+        
+        .restoration-info {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 6px;
+        }
+        
+        .restoration-mode {
+            font-weight: 500;
+            color: #333;
+        }
+        
+        .restoration-stats {
+            color: #666;
+        }
+        
+        .restoration-memory-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .memory-bar-background {
+            flex: 1;
+            height: 6px;
+            background: #e0e0e0;
+            border-radius: 3px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .memory-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4CAF50, #FFC107, #f44336);
+            border-radius: 3px;
+            transition: width 0.3s;
+        }
+        
+        .memory-threshold-line {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: #2196F3;
+            border-radius: 1px;
+        }
+        
+        .memory-percentage {
+            font-size: 11px;
+            color: #666;
+            min-width: 32px;
+            text-align: right;
+        }
+        
+        /* Tab restoration indicators */
+        .tab-item .restoration-indicator {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #2196F3;
+            display: none;
+        }
+        
+        .tab-item.restoring .restoration-indicator {
+            display: block;
+            animation: pulse 1s infinite;
+        }
+        
+        .tab-item.lite-mode {
+            border-right: 3px solid #FF9800;
+        }
+        
+        .tab-item.lite-mode::after {
+            content: "⚡";
+            position: absolute;
+            top: 2px;
+            right: 6px;
+            font-size: 10px;
+            color: #FF9800;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.2); }
+        }
     </style>
 </head>
 <body>
@@ -707,7 +811,31 @@
         <button id="suspend-all">Suspend All Tabs</button>
         <button id="auto-group-tabs-main">Auto-Group Tabs</button>
         <button id="declutter" class="secondary">Declutter</button>
-        <button id="restore-all" class="secondary">Restore All</button>
+        <div class="restore-controls" id="restore-controls">
+            <button id="restore-all" class="secondary">Restore All</button>
+            <button id="restore-all-lite" class="secondary" title="Restore tabs in lite mode to save memory">Restore (Lite)</button>
+            <button id="toggle-restoration-mode" class="icon-btn secondary" title="Toggle restoration mode">
+                <span id="restoration-mode-icon">🧠</span>
+            </button>
+        </div>
+    </div>
+    
+    <!-- Memory-Aware Restoration Status -->
+    <div class="restoration-status" id="restoration-status" style="display: none;">
+        <div class="restoration-info">
+            <span class="restoration-mode">Mode: <span id="current-restoration-mode">Smart</span></span>
+            <span class="restoration-stats">
+                <span id="restoration-progress">0/0</span> restored
+                (<span id="lite-restorations">0</span> lite)
+            </span>
+        </div>
+        <div class="restoration-memory-bar">
+            <div class="memory-bar-background">
+                <div class="memory-bar-fill" id="restoration-memory-fill" style="width: 0%"></div>
+                <div class="memory-threshold-line" id="restoration-threshold-line" style="left: 75%"></div>
+            </div>
+            <span class="memory-percentage" id="restoration-memory-percent">0%</span>
+        </div>
     </div>
     
     <div class="tab-list" id="tab-list">

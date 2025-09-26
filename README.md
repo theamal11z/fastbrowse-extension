@@ -6,6 +6,10 @@ FastBrowse is a powerful Chrome extension designed to minimize browser memory co
 
 ### 📑 Memory Management
 - **Automatic Tab Suspension**: Intelligently suspends inactive tabs using Chrome's built-in tab discarding API
+- **Memory-Aware Tab Restoration**: Smart tab restoration that prioritizes content over heavy media based on memory usage and site type
+- **Lite Mode Restoration**: Blocks auto-playing videos, animations, and heavy media during tab restoration for memory optimization
+- **Progressive Restoration**: Restores tabs in configurable batches with delays to prevent memory spikes
+- **Priority-Based Restoration**: Intelligent restoration ordering based on tab importance, recent usage, and user-defined priorities
 - **Smart Memory Monitoring**: Continuously monitors system memory usage and takes action when thresholds are exceeded
 - **Smart Memory Alerts (context-aware)**: Only warns/acts on sustained pressure when Chrome is likely responsible (recent Chrome focus + enough unsuspended tabs)
 - **Tab Protection**: Automatically protects pinned tabs, tabs playing audio, and system pages
@@ -22,10 +26,13 @@ FastBrowse is a powerful Chrome extension designed to minimize browser memory co
 - **Extension Recommendations**: Suggests complementary focus extensions (e.g., DF YouTube, News Feed Eradicator) and avoids suggesting ones you already have or suitable alternatives
 
 ### 🖥️ Interface & Usability
-- **Clean Interface**: Minimalist popup UI with real-time statistics and focus mode controls
+- **Clean Interface**: Minimalist popup UI with real-time statistics, focus mode controls, and restoration mode management
+- **Memory-Aware Restoration Controls**: Toggle between Smart (🧠), Lite (⚡), and Full (🚀) restoration modes with live memory visualization
+- **Progressive Restoration Status**: Real-time progress tracking during batch restoration operations
+- **Tab Restoration Indicators**: Visual indicators for tabs in lite mode and active restoration processes
 - **One‑Tap Declutter**: Preview duplicates and stale tabs, then clean up with undo support (Shift+Click for quick preview toast)
 - **Actionable Badge**: See how many quick actions are available at a glance
-- **Memory Usage Display**: Live memory usage monitoring with color-coded indicators
+- **Memory Usage Display**: Live memory usage monitoring with color-coded indicators and restoration threshold visualization
 - **Focus Statistics**: Track focus time and productivity metrics
 - **Auto-Group Tabs button**: One-click analysis to suggest tab groups by domain, tags, usage, or time patterns
 - **In-Popup Settings Panel**: Open via the ⚙️ in the header or Tags section; includes Focus Music, smart memory controls, and tag toggles
@@ -70,6 +77,23 @@ FastBrowse is a powerful Chrome extension designed to minimize browser memory co
 7. **Declutter**: Click to preview duplicates/stale and clean up with Undo, or Shift+Click for a quick preview toast with a Run action
 8. **Analyze extensions** to identify memory-heavy extensions and get optimization suggestions
 
+### 🧠 Memory-Aware Tab Restoration
+
+1. **Choose restoration mode** using the brain icon (🧠) in the popup:
+   - **Smart Mode** (🧠): Automatically selects the best restoration method based on memory usage and site content
+   - **Lite Mode** (⚡): Always restores tabs with memory optimization, blocking videos and animations
+   - **Full Mode** (🚀): Restores tabs without any restrictions or optimizations
+2. **Monitor memory usage** with the live memory bar showing current usage and lite mode threshold
+3. **Use Restore (Lite)** button for individual tabs to restore with memory optimization
+4. **Track restoration statistics** including total restored tabs and memory savings
+5. **Configure restoration preferences** in settings for automatic behavior
+
+#### Restoration Mode Benefits:
+- ⚡ **Lite Mode**: 50-80% memory reduction by blocking auto-playing videos, animations, and heavy media
+- 🚀 **Smart Priority**: Important tabs (pinned, recent, work-related) restore first
+- 📋 **Progressive Loading**: Batched restoration prevents memory spikes and system overload
+- 🎯 **Site Optimization**: Automatic detection of media-heavy sites for intelligent mode selection
+
 ### 🎯 Focus Mode Usage
 
 1. **Enable Focus Mode** by clicking the prominent toggle in the popup
@@ -113,7 +137,16 @@ FastBrowse is a powerful Chrome extension designed to minimize browser memory co
 3. **Set up memory monitoring**:
    - Enable automatic suspension when memory usage is high
    - Set the memory threshold percentage (60-95%)
-4. **Choose tab protection settings**:
+4. **Configure Memory-Aware Restoration**:
+   - Enable/disable smart restoration based on memory usage
+   - Set lite mode memory threshold (50-90%) - when exceeded, tabs restore in lite mode
+   - Enable progressive restoration with configurable delays (500-5000ms)
+   - Set maximum concurrent restorations (1-10 tabs)
+   - Choose restoration priority mode (Smart/Manual/All)
+   - Configure memory buffer for restoration operations (2-15%)
+   - Option to prioritize content over heavy media sites
+   - Set lite mode as default for all restorations
+5. **Choose tab protection settings**:
    - Protect pinned tabs from suspension
    - Protect tabs playing audio
    - Protect tabs with unsaved form data
@@ -148,10 +181,11 @@ FastBrowse is a powerful Chrome extension designed to minimize browser memory co
 
 FastBrowse uses Chrome Extension Manifest V3 with the following components:
 
-- **Background Service Worker**: Handles tab management, memory monitoring, and focus mode orchestration
-- **Popup Interface**: Provides user interface for manual tab control and focus mode management
-- **Options Page**: Allows configuration of all settings including focus mode preferences
-- **Content Scripts**: Injected into web pages for focus mode distraction removal and theme application
+- **Background Service Worker**: Handles tab management, memory monitoring, focus mode orchestration, and memory-aware restoration logic
+- **Popup Interface**: Provides user interface for manual tab control, focus mode management, and restoration mode selection
+- **Options Page**: Allows configuration of all settings including focus mode preferences and restoration behavior
+- **Content Scripts**: Injected into web pages for focus mode distraction removal, theme application, and lite mode media blocking
+- **Lite Mode Content Script**: Specialized script for blocking auto-playing videos, animations, and optimizing media-heavy pages
 - **Chrome APIs Used**:
   - `chrome.tabs` - Tab management and discarding
   - `chrome.system.memory` - Memory usage monitoring
@@ -179,6 +213,26 @@ FastBrowse uses Chrome Extension Manifest V3 with the following components:
 4. **Smart Memory Alerts**:
    - Requires sustained high memory across checks
    - Suppresses alerts/actions unless Chrome had recent focus and there are enough unsuspended tabs
+
+### Memory-Aware Restoration Strategy
+
+1. **Intelligent Mode Selection**:
+   - **Smart Mode**: Analyzes memory usage, tab content type, and system state to automatically choose optimal restoration method
+   - **Lite Mode**: Injects content script to block auto-playing videos, animations, and heavy media elements
+   - **Full Mode**: Standard restoration without any optimization or restrictions
+2. **Priority-Based Restoration**:
+   - **Tab Scoring System**: Calculates priority based on pinned status (+100), recent access (+30), audio playback (+60), and tag importance
+   - **Domain Classification**: Work domains (GitHub, Stack Overflow, docs) get higher priority (+25) than entertainment sites
+   - **Smart Ordering**: Restores high-priority tabs first, media-heavy sites last or in lite mode
+3. **Progressive Restoration**:
+   - **Batched Processing**: Restores tabs in configurable batches (1-10 concurrent) with delays (500-5000ms)
+   - **Memory Pressure Monitoring**: Pauses restoration when memory usage exceeds safe thresholds
+   - **Progress Tracking**: Real-time updates and notifications for large restoration operations
+4. **Lite Mode Optimizations**:
+   - **Media Blocking**: Replaces videos, GIFs, and auto-playing content with clickable placeholders
+   - **Animation Disabling**: Removes CSS animations and transitions for performance
+   - **Image Optimization**: Implements lazy loading and compression for off-screen images
+   - **Site-Specific Rules**: Custom selectors for YouTube, Twitter, Facebook, Instagram, and other media-heavy platforms
 
 ### Focus Mode Strategy
 
@@ -220,13 +274,17 @@ FastBrowse uses Chrome Extension Manifest V3 with the following components:
 fastbrowse-extension/
 ├── manifest.json          # Extension manifest (Manifest V3)
 ├── src/
-│   ├── background.js      # Background service worker
-│   ├── popup.html         # Popup interface HTML
-│   ├── popup.js           # Popup functionality
-│   ├── options.html       # Options page HTML
-│   ├── options.js         # Options page functionality
+│   ├── background.js      # Background service worker with memory-aware restoration
+│   ├── popup.html         # Popup interface HTML with restoration controls
+│   ├── popup.js           # Popup functionality and restoration management
+│   ├── options.html       # Options page HTML with restoration settings
+│   ├── options.js         # Options page functionality and restoration stats
 │   ├── offscreen.html     # Offscreen document for Focus Music playback
-│   └── offscreen.js       # Offscreen audio controller
+│   ├── offscreen.js       # Offscreen audio controller
+│   └── content/
+│       ├── focus-mode.js  # Focus mode content script
+│       ├── focus-mode.css # Focus mode styling
+│       └── lite-mode.js   # Lite mode restoration content script
 ├── assets/
 │   ├── icon16.png         # 16x16 extension icon
 │   ├── icon48.png         # 48x48 extension icon
@@ -272,6 +330,14 @@ fastbrowse-extension/
 - [ ] Auto-Group Tabs shows suggestions and Create Group works
 - [ ] Settings (inline) save and load properly
 - [ ] Focus Music: Preview works and music plays/stops with Focus Mode
+- [ ] Memory-aware restoration mode cycling works (Smart/Lite/Full)
+- [ ] Lite mode blocks videos and animations during restoration
+- [ ] Progressive restoration shows progress and respects timing settings
+- [ ] Priority-based restoration orders tabs correctly (pinned first, work sites priority)
+- [ ] Memory threshold triggers automatic lite mode restoration
+- [ ] Restoration statistics update correctly in popup and options
+- [ ] Individual tab lite restore button works
+- [ ] Restoration controls appear and function in popup
 - [ ] Notifications display when enabled
 
 ### Memory Impact Testing

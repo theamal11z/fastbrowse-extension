@@ -46,6 +46,24 @@ class OptionsManager {
             totalTagsCount: document.getElementById('total-tags-count'),
             frequentTagsCount: document.getElementById('frequent-tags-count'),
             taggedTabsCount: document.getElementById('tagged-tabs-count'),
+            // Memory-aware restoration elements
+            memoryAwareRestoration: document.getElementById('memory-aware-restoration'),
+            liteRestorationThreshold: document.getElementById('lite-restoration-threshold'),
+            liteRestorationThresholdValue: document.getElementById('lite-restoration-threshold-value'),
+            progressiveRestorationEnabled: document.getElementById('progressive-restoration-enabled'),
+            progressiveRestorationDelay: document.getElementById('progressive-restoration-delay'),
+            progressiveRestorationDelayValue: document.getElementById('progressive-restoration-delay-value'),
+            prioritizeContentOverMedia: document.getElementById('prioritize-content-over-media'),
+            liteRestorationDefault: document.getElementById('lite-restoration-default'),
+            restorationPriorityMode: document.getElementById('restoration-priority-mode'),
+            maxConcurrentRestorations: document.getElementById('max-concurrent-restorations'),
+            maxConcurrentRestorationsValue: document.getElementById('max-concurrent-restorations-value'),
+            restorationMemoryBuffer: document.getElementById('restoration-memory-buffer'),
+            restorationMemoryBufferValue: document.getElementById('restoration-memory-buffer-value'),
+            totalRestoredCount: document.getElementById('total-restored-count'),
+            liteRestoredCount: document.getElementById('lite-restored-count'),
+            memoryOptimizedCount: document.getElementById('memory-optimized-count'),
+            lastRestorationTime: document.getElementById('last-restoration-time'),
             saveButton: document.getElementById('save'),
             saveStatus: document.getElementById('save-status')
         };
@@ -57,6 +75,7 @@ class OptionsManager {
         await this.loadSettings();
         await this.loadFocusStats();
         await this.loadTagStats();
+        await this.loadRestorationStats();
         this.setupEventListeners();
     }
     
@@ -86,6 +105,31 @@ class OptionsManager {
         this.elements.tagInactivityDays.addEventListener('input', () => {
             this.elements.tagInactivityDaysValue.textContent = this.elements.tagInactivityDays.value;
         });
+        
+        // Restoration settings range updates
+        if (this.elements.liteRestorationThreshold) {
+            this.elements.liteRestorationThreshold.addEventListener('input', () => {
+                this.elements.liteRestorationThresholdValue.textContent = this.elements.liteRestorationThreshold.value;
+            });
+        }
+        
+        if (this.elements.progressiveRestorationDelay) {
+            this.elements.progressiveRestorationDelay.addEventListener('input', () => {
+                this.elements.progressiveRestorationDelayValue.textContent = this.elements.progressiveRestorationDelay.value;
+            });
+        }
+        
+        if (this.elements.maxConcurrentRestorations) {
+            this.elements.maxConcurrentRestorations.addEventListener('input', () => {
+                this.elements.maxConcurrentRestorationsValue.textContent = this.elements.maxConcurrentRestorations.value;
+            });
+        }
+        
+        if (this.elements.restorationMemoryBuffer) {
+            this.elements.restorationMemoryBuffer.addEventListener('input', () => {
+                this.elements.restorationMemoryBufferValue.textContent = this.elements.restorationMemoryBuffer.value;
+            });
+        }
         
         // Save button
         this.elements.saveButton.addEventListener('click', () => {
@@ -126,6 +170,37 @@ class OptionsManager {
         this.elements.tagInactivityDays.addEventListener('change', () => {
             this.saveSettings();
         });
+        
+        // Restoration range change listeners
+        if (this.elements.liteRestorationThreshold) {
+            this.elements.liteRestorationThreshold.addEventListener('change', () => {
+                this.saveSettings();
+            });
+        }
+        
+        if (this.elements.progressiveRestorationDelay) {
+            this.elements.progressiveRestorationDelay.addEventListener('change', () => {
+                this.saveSettings();
+            });
+        }
+        
+        if (this.elements.maxConcurrentRestorations) {
+            this.elements.maxConcurrentRestorations.addEventListener('change', () => {
+                this.saveSettings();
+            });
+        }
+        
+        if (this.elements.restorationMemoryBuffer) {
+            this.elements.restorationMemoryBuffer.addEventListener('change', () => {
+                this.saveSettings();
+            });
+        }
+        
+        if (this.elements.restorationPriorityMode) {
+            this.elements.restorationPriorityMode.addEventListener('change', () => {
+                this.saveSettings();
+            });
+        }
     }
     
     async loadSettings() {
@@ -176,6 +251,23 @@ class OptionsManager {
                 this.elements.tagInactivityDays.value = settings.tagInactivityDays;
                 this.elements.tagInactivityDaysValue.textContent = settings.tagInactivityDays;
                 
+                // Memory-aware restoration settings
+                if (this.elements.memoryAwareRestoration) {
+                    this.elements.memoryAwareRestoration.checked = settings.memoryAwareRestoration !== false;
+                    this.elements.liteRestorationThreshold.value = settings.liteRestorationThreshold || 75;
+                    this.elements.liteRestorationThresholdValue.textContent = settings.liteRestorationThreshold || 75;
+                    this.elements.progressiveRestorationEnabled.checked = settings.progressiveRestorationEnabled !== false;
+                    this.elements.progressiveRestorationDelay.value = settings.progressiveRestorationDelay || 1000;
+                    this.elements.progressiveRestorationDelayValue.textContent = settings.progressiveRestorationDelay || 1000;
+                    this.elements.prioritizeContentOverMedia.checked = settings.prioritizeContentOverMedia !== false;
+                    this.elements.liteRestorationDefault.checked = settings.liteRestorationDefault || false;
+                    this.elements.restorationPriorityMode.value = settings.restorationPriorityMode || 'smart';
+                    this.elements.maxConcurrentRestorations.value = settings.maxConcurrentRestorations || 3;
+                    this.elements.maxConcurrentRestorationsValue.textContent = settings.maxConcurrentRestorations || 3;
+                    this.elements.restorationMemoryBuffer.value = settings.restorationMemoryBuffer || 5;
+                    this.elements.restorationMemoryBufferValue.textContent = settings.restorationMemoryBuffer || 5;
+                }
+                
                 console.log('Settings loaded successfully');
             }
         } catch (error) {
@@ -219,6 +311,19 @@ class OptionsManager {
                 maxTagsPerTab: parseInt(this.elements.maxTagsPerTab.value),
                 tagInactivityDays: parseInt(this.elements.tagInactivityDays.value)
             };
+            
+            // Add restoration settings if elements exist
+            if (this.elements.memoryAwareRestoration) {
+                settings.memoryAwareRestoration = this.elements.memoryAwareRestoration.checked;
+                settings.liteRestorationThreshold = parseInt(this.elements.liteRestorationThreshold.value);
+                settings.progressiveRestorationEnabled = this.elements.progressiveRestorationEnabled.checked;
+                settings.progressiveRestorationDelay = parseInt(this.elements.progressiveRestorationDelay.value);
+                settings.prioritizeContentOverMedia = this.elements.prioritizeContentOverMedia.checked;
+                settings.liteRestorationDefault = this.elements.liteRestorationDefault.checked;
+                settings.restorationPriorityMode = this.elements.restorationPriorityMode.value;
+                settings.maxConcurrentRestorations = parseInt(this.elements.maxConcurrentRestorations.value);
+                settings.restorationMemoryBuffer = parseInt(this.elements.restorationMemoryBuffer.value);
+            }
             
             const response = await this.sendMessage({ 
                 action: 'updateSettings', 
@@ -313,9 +418,61 @@ class OptionsManager {
         }
     }
     
+    async loadRestorationStats() {
+        try {
+            const response = await this.sendMessage({ action: 'getRestorationStats' });
+            if (response.success && this.elements.totalRestoredCount) {
+                const stats = response.data;
+                
+                // Update restoration statistics
+                this.elements.totalRestoredCount.textContent = stats.totalRestored || 0;
+                this.elements.liteRestoredCount.textContent = stats.liteRestorations || 0;
+                this.elements.memoryOptimizedCount.textContent = stats.memoryOptimized || 0;
+                
+                // Format last restoration time
+                if (stats.lastRestorationTime) {
+                    const date = new Date(stats.lastRestorationTime);
+                    this.elements.lastRestorationTime.textContent = date.toLocaleString();
+                } else {
+                    this.elements.lastRestorationTime.textContent = 'Never';
+                }
+            }
+        } catch (error) {
+            console.error('Failed to load restoration stats:', error);
+            if (this.elements.totalRestoredCount) {
+                this.elements.totalRestoredCount.textContent = 'Error';
+                this.elements.liteRestoredCount.textContent = 'Error';
+                this.elements.memoryOptimizedCount.textContent = 'Error';
+                this.elements.lastRestorationTime.textContent = 'Error';
+            }
+        }
+    }
+    
     sendMessage(message) {
-        return new Promise((resolve) => {
-            chrome.runtime.sendMessage(message, resolve);
+        return new Promise((resolve, reject) => {
+            try {
+                chrome.runtime.sendMessage(message, (response) => {
+                    if (chrome.runtime.lastError) {
+                        console.error('Runtime error in options:', chrome.runtime.lastError.message);
+                        // Provide fallback responses for stats queries
+                        if (message.action === 'getRestorationStats') {
+                            resolve({ 
+                                success: true, 
+                                data: { totalRestored: 0, liteRestorations: 0, memoryOptimized: 0 }
+                            });
+                        } else if (message.action === 'getSettings') {
+                            resolve({ success: false, error: 'Connection failed' });
+                        } else {
+                            reject(chrome.runtime.lastError);
+                        }
+                    } else {
+                        resolve(response || { success: false, error: 'No response' });
+                    }
+                });
+            } catch (error) {
+                console.error('Failed to send message from options:', error);
+                reject(error);
+            }
         });
     }
 }

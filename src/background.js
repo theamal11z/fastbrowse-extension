@@ -59,7 +59,18 @@ class FastBrowse {
             tagInactivityDays: 30, // Days before a tag is considered inactive
             // Tab relationships
             relationshipsEnabled: true,
-            relationshipDecayMinutes: 60
+            relationshipDecayMinutes: 60,
+            // Memory-aware restoration settings
+            memoryAwareRestoration: true,
+            liteRestorationThreshold: 75, // Memory usage % to trigger lite mode
+            progressiveRestorationEnabled: true,
+            progressiveRestorationDelay: 1000, // ms between restoring tabs
+            prioritizeContentOverMedia: true,
+            liteRestorationDefault: false,
+            // Restoration priority settings
+            restorationPriorityMode: 'smart', // 'smart', 'manual', 'all'
+            maxConcurrentRestorations: 3,
+            restorationMemoryBuffer: 5 // % memory buffer to maintain
         };
         
         this.suspendedTabs = new Map();
@@ -105,6 +116,17 @@ class FastBrowse {
         this.activeNotifications = new Set();
         this.notificationCooldowns = new Map();
         this.lastNotificationTime = new Map();
+        
+        // Memory-aware restoration state
+        this.restorationQueue = [];
+        this.activeRestorations = new Set();
+        this.restorationStats = {
+            totalRestored: 0,
+            liteRestorations: 0,
+            memoryOptimized: 0,
+            lastRestorationTime: null
+        };
+        this.tabRestorePriorities = new Map(); // tabId -> priority score
         
         // Recommended focus extensions database
         this.recommendedFocusExtensions = new Map([
@@ -614,19 +636,34 @@ class FastBrowse {
         }
     }
     
-    async restoreTab(tabId) {
+    async restoreTab(tabId, options = {}) {
         try {
             const tab = await chrome.tabs.get(tabId);
+            const restoreMode = await this.determineRestoreMode(tab, options);
             
-            if (tab.discarded) {
-                await chrome.tabs.reload(tabId);
+            console.log(`Restoring tab ${tabId} in ${restoreMode} mode: ${tab.title || 'Unknown'}`);
+            
+            // Track active restoration
+            this.activeRestorations.add(tabId);
+            
+            if (restoreMode === 'lite') {
+                await this.restoreTabLite(tab, options);
+                this.restorationStats.liteRestorations++;
+            } else {
+                await this.restoreTabFull(tab, options);
             }
             
             this.suspendedTabs.delete(tabId);
-            console.log(`Tab ${tabId} restored: ${tab.title || 'Unknown'}`);
+            this.activeRestorations.delete(tabId);
+            this.restorationStats.totalRestored++;
+            this.restorationStats.lastRestorationTime = Date.now();
+            
+            console.log(`✓ Tab ${tabId} restored successfully`);
+            
         } catch (error) {
             // Clean up our records even if tab doesn't exist
             this.suspendedTabs.delete(tabId);
+            this.activeRestorations.delete(tabId);
             
             if (error.message && error.message.includes('No tab with id')) {
                 console.log(`Cannot restore tab ${tabId} - tab no longer exists`);
@@ -634,6 +671,137 @@ class FastBrowse {
             }
             console.error(`Failed to restore tab ${tabId}:`, error);
         }
+    }
+    
+    async determineRestoreMode(tab, options = {}) {
+        // Check for user override
+        if (options.forceMode) {
+            return options.forceMode;
+        }
+        
+        // If memory-aware restoration is disabled, always use full mode
+        if (!this.settings.memoryAwareRestoration) {
+            return 'full';
+        }
+        
+        // Check if lite mode is default setting
+        if (this.settings.liteRestorationDefault) {
+            return 'lite';
+        }
+        
+        try {
+            // Check current memory usage
+            const memoryInfo = await chrome.system.memory.getInfo();
+            const usagePercent = ((memoryInfo.capacity - memoryInfo.availableCapacity) / memoryInfo.capacity) * 100;
+            
+            // Use lite mode if memory usage is high
+            if (usagePercent > this.settings.liteRestorationThreshold) {
+                console.log(`Using lite mode due to high memory usage: ${usagePercent.toFixed(1)}%`);
+                return 'lite';
+            }
+            
+            // Check if tab contains heavy media (based on URL patterns)
+            if (this.settings.prioritizeContentOverMedia && this.isMediaHeavyTab(tab)) {
+                console.log(`Using lite mode for media-heavy tab: ${tab.url}`);
+                return 'lite';
+            }
+            
+            // Check concurrent restorations
+            if (this.activeRestorations.size >= this.settings.maxConcurrentRestorations) {
+                console.log(`Using lite mode due to concurrent restoration limit`);
+                return 'lite';
+            }
+            
+            return 'full';
+            
+        } catch (error) {
+            console.warn('Failed to determine restore mode, using full:', error);
+            return 'full';
+        }
+    }
+    
+    isMediaHeavyTab(tab) {
+        if (!tab.url) return false;
+        
+        const mediaHeavySites = [
+            'youtube.com', 'vimeo.com', 'dailymotion.com', 'twitch.tv',
+            'netflix.com', 'hulu.com', 'disney.com', 'amazon.com/prime',
+            'instagram.com', 'tiktok.com', 'twitter.com', 'x.com',
+            'reddit.com/r/videos', 'imgur.com', 'giphy.com'
+        ];
+        
+        return mediaHeavySites.some(site => tab.url.includes(site));
+    }
+    
+    async restoreTabFull(tab, options = {}) {
+        if (tab.discarded) {
+            await chrome.tabs.reload(tab.id);
+        }
+        
+        // Wait a bit for tab to load before considering it fully restored
+        if (!options.skipWait) {
+            await this.waitForTabLoad(tab.id, 3000); // 3 second timeout
+        }
+    }
+    
+    async restoreTabLite(tab, options = {}) {
+        if (tab.discarded) {
+            // First, reload the tab
+            await chrome.tabs.reload(tab.id);
+            
+            // Wait for basic page load
+            await this.waitForTabLoad(tab.id, 2000);
+            
+            // Inject lite mode content script to block heavy media
+            try {
+                await chrome.scripting.executeScript({
+                    target: { tabId: tab.id },
+                    files: ['src/content/lite-mode.js']
+                });
+                
+                // Enable lite mode
+                await chrome.tabs.sendMessage(tab.id, {
+                    action: 'enableLiteMode',
+                    options: {
+                        blockVideos: true,
+                        blockAutoplay: true,
+                        blockAnimations: this.settings.focusDisableAnimations,
+                        blockSocialEmbeds: true,
+                        showPlaceholders: true,
+                        optimizeImages: true
+                    }
+                });
+                
+                console.log(`✓ Lite mode enabled for tab ${tab.id}`);
+                this.restorationStats.memoryOptimized++;
+                
+            } catch (error) {
+                console.warn(`Failed to enable lite mode for tab ${tab.id}:`, error);
+                // Continue with regular restoration if lite mode fails
+            }
+        }
+    }
+    
+    async waitForTabLoad(tabId, timeout = 5000) {
+        return new Promise((resolve) => {
+            const startTime = Date.now();
+            
+            const checkTab = async () => {
+                try {
+                    const tab = await chrome.tabs.get(tabId);
+                    
+                    if (tab.status === 'complete' || Date.now() - startTime > timeout) {
+                        resolve();
+                    } else {
+                        setTimeout(checkTab, 500);
+                    }
+                } catch (error) {
+                    resolve(); // Tab might be closed, just resolve
+                }
+            };
+            
+            checkTab();
+        });
     }
     
     async shouldProtectTab(tab) {
@@ -700,15 +868,163 @@ class FastBrowse {
         }
     }
     
-    async restoreAllTabs() {
+    async restoreAllTabs(options = {}) {
         try {
             const suspendedTabIds = Array.from(this.suspendedTabs.keys());
+            console.log(`Starting restoration of ${suspendedTabIds.length} suspended tabs`);
             
-            for (const tabId of suspendedTabIds) {
-                await this.restoreTab(tabId);
+            if (this.settings.progressiveRestorationEnabled && !options.immediate) {
+                await this.progressiveRestoreAllTabs(suspendedTabIds, options);
+            } else {
+                // Restore all tabs immediately (legacy behavior)
+                for (const tabId of suspendedTabIds) {
+                    await this.restoreTab(tabId, options);
+                }
             }
+            
+            console.log(`✓ Completed restoration of all tabs`);
         } catch (error) {
             console.error('Failed to restore all tabs:', error);
+        }
+    }
+    
+    async progressiveRestoreAllTabs(tabIds, options = {}) {
+        const prioritizedTabs = await this.prioritizeTabsForRestoration(tabIds);
+        const delay = options.delay || this.settings.progressiveRestorationDelay;
+        const maxConcurrent = options.maxConcurrent || this.settings.maxConcurrentRestorations;
+        
+        console.log(`Progressive restoration: ${prioritizedTabs.length} tabs, ${delay}ms delay, max ${maxConcurrent} concurrent`);
+        
+        let processed = 0;
+        const chunks = [];
+        
+        // Split tabs into chunks for concurrent processing
+        for (let i = 0; i < prioritizedTabs.length; i += maxConcurrent) {
+            chunks.push(prioritizedTabs.slice(i, i + maxConcurrent));
+        }
+        
+        for (const chunk of chunks) {
+            // Check memory before each chunk
+            if (await this.shouldPauseRestoration()) {
+                console.log('Pausing restoration due to memory pressure');
+                await new Promise(resolve => setTimeout(resolve, delay * 3));
+                continue;
+            }
+            
+            // Restore chunk concurrently
+            const promises = chunk.map(async (tabData) => {
+                try {
+                    await this.restoreTab(tabData.tabId, { 
+                        ...options,
+                        priority: tabData.priority 
+                    });
+                    processed++;
+                } catch (error) {
+                    console.error(`Failed to restore tab ${tabData.tabId}:`, error);
+                }
+            });
+            
+            await Promise.allSettled(promises);
+            
+            // Progress notification
+            if (this.settings.showNotifications && chunks.length > 1) {
+                const progress = Math.round((processed / prioritizedTabs.length) * 100);
+                this.showNotification(`Restoration progress: ${progress}% (${processed}/${prioritizedTabs.length} tabs)`);
+            }
+            
+            // Delay before next chunk (except for last chunk)
+            if (chunk !== chunks[chunks.length - 1]) {
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
+        }
+    }
+    
+    async prioritizeTabsForRestoration(tabIds) {
+        const tabPriorities = [];
+        
+        for (const tabId of tabIds) {
+            try {
+                const tab = await chrome.tabs.get(tabId);
+                const priority = this.calculateTabRestorePriority(tab);
+                
+                tabPriorities.push({
+                    tabId,
+                    priority,
+                    tab
+                });
+            } catch (error) {
+                // Tab might be closed, skip it
+                console.debug(`Tab ${tabId} no longer exists, skipping`);
+            }
+        }
+        
+        // Sort by priority (higher priority first)
+        return tabPriorities.sort((a, b) => b.priority - a.priority);
+    }
+    
+    calculateTabRestorePriority(tab) {
+        let priority = 0;
+        
+        // Base priority factors
+        if (tab.pinned) priority += 100;  // Pinned tabs highest priority
+        if (tab.active) priority += 80;   // Active tab very high priority
+        if (tab.audible) priority += 60;  // Audio tabs high priority
+        
+        // Tag-based priority
+        if (this.settings.tagsEnabled) {
+            const tabTags = this.getTabTags(tab.id);
+            for (const tag of tabTags) {
+                if (tag.priority === 'high') priority += 40;
+                else if (tag.priority === 'medium') priority += 20;
+                else if (tag.priority === 'low') priority += 5;
+                
+                // Frequently used tags get bonus
+                if (tag.frequency >= this.settings.tagFrequencyThreshold) {
+                    priority += 15;
+                }
+            }
+        }
+        
+        // Recency factor (more recently accessed = higher priority)
+        if (tab.lastAccessed) {
+            const ageHours = (Date.now() - tab.lastAccessed) / (1000 * 60 * 60);
+            if (ageHours < 1) priority += 30;
+            else if (ageHours < 6) priority += 15;
+            else if (ageHours < 24) priority += 5;
+        }
+        
+        // Domain-based priority adjustments
+        if (tab.url) {
+            // Work/productivity sites get higher priority
+            const workDomains = ['github.com', 'gitlab.com', 'stackoverflow.com', 'docs.google.com', 'notion.so', 'slack.com'];
+            if (workDomains.some(domain => tab.url.includes(domain))) {
+                priority += 25;
+            }
+            
+            // Media-heavy sites get lower priority for lite mode consideration
+            if (this.isMediaHeavyTab(tab)) {
+                priority -= 10;
+            }
+        }
+        
+        // Store calculated priority for UI display
+        this.tabRestorePriorities.set(tab.id, priority);
+        
+        return Math.max(0, priority); // Ensure non-negative
+    }
+    
+    async shouldPauseRestoration() {
+        if (!this.settings.memoryAwareRestoration) return false;
+        
+        try {
+            const memoryInfo = await chrome.system.memory.getInfo();
+            const usagePercent = ((memoryInfo.capacity - memoryInfo.availableCapacity) / memoryInfo.capacity) * 100;
+            const bufferThreshold = this.settings.liteRestorationThreshold - this.settings.restorationMemoryBuffer;
+            
+            return usagePercent > bufferThreshold;
+        } catch (error) {
+            console.warn('Failed to check memory for restoration pause:', error);
+            return false;
         }
     }
     
@@ -2104,13 +2420,6 @@ class FastBrowse {
             return false;
         }
     }
-        try {
-            const u = new URL(url);
-            return whitelist.some(d => u.hostname.includes(d));
-        } catch (_) {
-            return false;
-        }
-    }
 
     // Declutter analysis and actions
     normalizeUrlForDuplicates(urlStr) {
@@ -2542,8 +2851,39 @@ class FastBrowse {
                     
                 case 'restoreTab':
                     console.log(`Manual restore request for tab ${request.tabId}`);
-                    await this.restoreTab(request.tabId);
+                    await this.restoreTab(request.tabId, request.options || {});
                     sendResponse({ success: true });
+                    break;
+                    
+                case 'restoreTabLite':
+                    console.log(`Lite restore request for tab ${request.tabId}`);
+                    await this.restoreTab(request.tabId, { forceMode: 'lite' });
+                    sendResponse({ success: true });
+                    break;
+                    
+                case 'restoreTabFull':
+                    console.log(`Full restore request for tab ${request.tabId}`);
+                    await this.restoreTab(request.tabId, { forceMode: 'full' });
+                    sendResponse({ success: true });
+                    break;
+                    
+                case 'getRestorationStats':
+                    sendResponse({ 
+                        success: true, 
+                        data: {
+                            ...this.restorationStats,
+                            activeRestorations: this.activeRestorations.size,
+                            queueLength: this.restorationQueue.length
+                        }
+                    });
+                    break;
+                    
+                case 'getTabPriorities':
+                    const priorities = {};
+                    this.tabRestorePriorities.forEach((priority, tabId) => {
+                        priorities[tabId] = priority;
+                    });
+                    sendResponse({ success: true, data: priorities });
                     break;
                     
                     
