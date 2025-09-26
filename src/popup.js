@@ -7,6 +7,7 @@ class PopupManager {
         this.tabListElement = document.getElementById('tab-list');
         this.suspendAllButton = document.getElementById('suspend-all');
         this.restoreAllButton = document.getElementById('restore-all');
+        this.autoGroupTabsMainButton = document.getElementById('auto-group-tabs-main');
         
         // Extension monitoring elements
         this.analyzeExtensionsButton = document.getElementById('analyze-extensions');
@@ -60,6 +61,12 @@ class PopupManager {
         this.restoreAllButton.addEventListener('click', () => {
             this.restoreAllTabs();
         });
+        
+        if (this.autoGroupTabsMainButton) {
+            this.autoGroupTabsMainButton.addEventListener('click', () => {
+                this.autoGroupTabs();
+            });
+        }
         
         this.analyzeExtensionsButton.addEventListener('click', () => {
             this.analyzeExtensions();
