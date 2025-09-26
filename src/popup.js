@@ -36,6 +36,9 @@ class PopupManager {
         this.activeTagPillsElement = document.getElementById('active-tag-pills');
         this.groupSuggestionsElement = document.getElementById('group-suggestions');
         
+        // Toasts
+        this.toastContainer = document.getElementById('toast-container');
+        
         // Current filter state
         this.currentFilter = 'all';
         this.selectedTagId = null;
@@ -64,7 +67,7 @@ class PopupManager {
         
         if (this.autoGroupTabsMainButton) {
             this.autoGroupTabsMainButton.addEventListener('click', () => {
-                this.autoGroupTabs();
+                this.autoGroupTabs(this.autoGroupTabsMainButton);
             });
         }
         
@@ -106,7 +109,7 @@ class PopupManager {
         });
         
         this.autoGroupTabsButton.addEventListener('click', () => {
-            this.autoGroupTabs();
+            this.autoGroupTabs(this.autoGroupTabsButton);
         });
         
         this.toggleTagsButton.addEventListener('click', () => {
@@ -375,10 +378,14 @@ class PopupManager {
         });
     }
     
-    async autoGroupTabs() {
+    async autoGroupTabs(triggerButton = null) {
+        const btn = triggerButton || this.autoGroupTabsButton;
+        const originalLabel = btn ? btn.textContent : '';
         try {
-            this.autoGroupTabsButton.disabled = true;
-            this.autoGroupTabsButton.textContent = 'Analyzing...';
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = 'Analyzing...';
+            }
             
             const response = await this.sendMessage({ action: 'autoGroupTabs' });
             if (response.success) {
@@ -388,15 +395,23 @@ class PopupManager {
                 if (this.tagsSectionElement.style.display === 'none') {
                     this.toggleTagsSection();
                 }
+                
+                if (!response.data || response.data.length === 0) {
+                    this.showToast('No grouping suggestions found', 'info');
+                } else {
+                    this.showToast('Grouping suggestions updated', 'success');
+                }
             } else {
                 throw new Error(response.error || 'Failed to generate suggestions');
             }
         } catch (error) {
             console.error('Failed to auto-group tabs:', error);
-            alert(`Failed to auto-group tabs: ${error.message}`);
+            this.showToast(`Failed to auto-group tabs: ${error.message}`, 'error');
         } finally {
-            this.autoGroupTabsButton.disabled = false;
-            this.autoGroupTabsButton.textContent = 'Auto-Group';
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = originalLabel || 'Auto-Group';
+            }
         }
     }
     
@@ -464,7 +479,7 @@ class PopupManager {
             });
             
             if (response.success) {
-                alert(`Group "${suggestion.name}" created successfully!`);
+                this.showToast(`Group "${suggestion.name}" created successfully`, 'success');
                 // Refresh the display
                 await this.updateTagsDisplay();
             } else {
@@ -472,7 +487,7 @@ class PopupManager {
             }
         } catch (error) {
             console.error('Failed to create group:', error);
-            alert(`Failed to create group: ${error.message}`);
+            this.showToast(`Failed to create group: ${error.message}`, 'error');
         }
     }
     
@@ -786,19 +801,11 @@ class PopupManager {
             });
             
             if (response.success) {
-                // Show success message
-                const notification = document.createElement('div');
-                notification.textContent = `Extension "${extensionName}" disabled successfully`;
-                notification.style.cssText = 'position: fixed; top: 10px; right: 10px; background: #4caf50; color: white; padding: 8px 12px; border-radius: 4px; font-size: 12px; z-index: 1000;';
-                document.body.appendChild(notification);
-                
-                setTimeout(() => {
-                    document.body.removeChild(notification);
-                }, 3000);
+                this.showToast(`Extension "${extensionName}" disabled`, 'success');
             }
         } catch (error) {
             console.error('Failed to disable extension:', error);
-            alert(`Failed to disable extension: ${error.message}`);
+            this.showToast(`Failed to disable extension: ${error.message}`, 'error');
         }
     }
     
@@ -860,7 +867,7 @@ class PopupManager {
             }
         } catch (error) {
             console.error('Failed to toggle focus mode:', error);
-            alert(`Failed to toggle focus mode: ${error.message}`);
+            this.showToast(`Failed to toggle focus mode: ${error.message}`, 'error');
         } finally {
             this.focusToggleButton.disabled = false;
         }
@@ -874,7 +881,7 @@ class PopupManager {
             }
         } catch (error) {
             console.error('Failed to load focus recommendations:', error);
-            alert(`Failed to load recommendations: ${error.message}`);
+            this.showToast(`Failed to load recommendations: ${error.message}`, 'error');
         }
     }
     
@@ -966,6 +973,37 @@ class PopupManager {
         });
     }
     
+    // Toast helper
+    showToast(message, type = 'info', timeout = 3000) {
+        try {
+            if (!this.toastContainer) return;
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            
+            const closeBtn = document.createElement('button');
+            closeBtn.className = 'toast-close';
+            closeBtn.textContent = '×';
+            closeBtn.addEventListener('click', () => {
+                if (this.toastContainer.contains(toast)) {
+                    this.toastContainer.removeChild(toast);
+                }
+            });
+            toast.appendChild(closeBtn);
+            
+            this.toastContainer.appendChild(toast);
+            
+            setTimeout(() => {
+                if (this.toastContainer.contains(toast)) {
+                    this.toastContainer.removeChild(toast);
+                }
+            }, timeout);
+        } catch (e) {
+            // Silent fallback if DOM not ready
+            console.warn('Toast failed:', e);
+        }
+    }
+
     sendMessage(message) {
         return new Promise((resolve, reject) => {
             try {
