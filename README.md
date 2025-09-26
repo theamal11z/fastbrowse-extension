@@ -1,16 +1,35 @@
-# FastBrowse: Lightweight Chrome Extension to Reduce Memory Usage
+# FastBrowse: Advanced Chrome Extension for Memory Optimization & Focus
 
-FastBrowse is a Chrome extension designed to minimize browser memory consumption without sacrificing user experience. It leverages Chrome's native performance features and smart tab management to keep browsing fast and efficient—especially on systems with limited RAM.
+FastBrowse is a powerful Chrome extension designed to minimize browser memory consumption and eliminate distractions for enhanced productivity. It combines intelligent tab management, focus mode features, and smart extension recommendations to create the ultimate browsing experience—especially beneficial for users with limited RAM or those seeking distraction-free productivity.
 
 ## ✨ Features
 
+### 📑 Memory Management
 - **Automatic Tab Suspension**: Intelligently suspends inactive tabs using Chrome's built-in tab discarding API
 - **Smart Memory Monitoring**: Continuously monitors system memory usage and takes action when thresholds are exceeded
 - **Tab Protection**: Automatically protects pinned tabs, tabs playing audio, and system pages
-- **Clean Interface**: Minimalist popup UI for viewing and managing suspended tabs
-- **Memory Usage Display**: Real-time memory usage statistics in the popup
-- **Configurable Settings**: Fully customizable suspension timing and behavior
+- **Extension Memory Analysis**: Identifies memory-heavy extensions and provides optimization suggestions
+- **Emergency Suspend**: Automatically suspends tabs during high memory pressure situations
+
+### 🎯 Focus Mode
+- **Distraction Removal**: Automatically hides distracting elements on major websites (YouTube suggestions, social media feeds, ads, etc.)
+- **Minimal Dark Theme**: Applies a clean, eye-friendly dark theme across all websites
+- **Animation Disabling**: Removes animations and transitions for better focus and performance
+- **Memory Optimization**: Advanced techniques including image compression and lazy loading
+- **Auto-Suspend Integration**: Automatically suspends background tabs when entering focus mode
+- **Extension Recommendations**: Suggests complementary focus extensions (uBlock Origin, DF YouTube, etc.)
+
+### 🖥️ Interface & Usability
+- **Clean Interface**: Minimalist popup UI with real-time statistics and focus mode controls
+- **Memory Usage Display**: Live memory usage monitoring with color-coded indicators
+- **Focus Statistics**: Track focus time and productivity metrics
+- **One-Click Controls**: Easy toggle for focus mode and quick tab management
+- **Configurable Settings**: Fully customizable behavior for all features
+
+### 🔒 Privacy & Performance
 - **Zero Tracking**: No third-party analytics or data collection
+- **Local Processing**: All functionality works entirely offline
+- **Minimal Resource Usage**: Optimized service worker with event-driven architecture
 - **Open Source**: Complete transparency in code and functionality
 
 ## 🚀 Installation
@@ -26,19 +45,40 @@ FastBrowse is a Chrome extension designed to minimize browser memory consumption
 ### From Chrome Web Store
 *(Coming soon - extension will be published after testing)*
 
-## 📖 How to Use
+## 📚 How to Use
 
-### Basic Usage
+### Basic Memory Management
 
 1. **Click the FastBrowse icon** in your toolbar to open the popup
-2. **View memory usage** at the top of the popup
+2. **View memory usage** at the top with color-coded indicators (green/yellow/red)
 3. **See all your tabs** organized by window with suspension status
 4. **Manually suspend/restore** individual tabs using the buttons
 5. **Suspend all inactive tabs** with one click using "Suspend All Tabs"
+6. **Analyze extensions** to identify memory-heavy extensions and get optimization suggestions
+
+### 🎯 Focus Mode Usage
+
+1. **Enable Focus Mode** by clicking the prominent toggle in the popup
+2. **Watch distractions disappear** automatically across all your open tabs
+3. **Enjoy the minimal theme** that reduces eye strain and visual noise
+4. **Track your productivity** with real-time focus time and tab suspension statistics
+5. **Get extension recommendations** for enhanced focus (uBlock Origin, DF YouTube, etc.)
+6. **Disable Focus Mode** anytime to restore the original browsing experience
+
+#### Focus Mode Benefits:
+- ✨ **YouTube**: Removes suggestions, comments, and sidebar distractions
+- 🐦 **Twitter/X**: Hides trending topics, suggestions, and promoted content
+- 📱 **Facebook**: Removes news feed clutter and sponsored posts
+- 📷 **Instagram**: Hides explore grid and suggested content
+- 📝 **Reddit**: Removes promoted posts, trending sections, and sidebars
+- 💻 **GitHub**: Cleans up marketing sections and unnecessary sidebars
+- 💼 **LinkedIn**: Removes news modules and suggested connections
 
 ### Settings Configuration
 
 1. **Right-click the FastBrowse icon** and select "Options" (or click the options link in the popup)
+
+#### Memory Management Settings
 2. **Configure automatic suspension**:
    - Enable/disable automatic tab suspension
    - Set the delay before inactive tabs are suspended (5-120 minutes)
@@ -49,9 +89,30 @@ FastBrowse is a Chrome extension designed to minimize browser memory consumption
    - Protect pinned tabs from suspension
    - Protect tabs playing audio
    - Protect tabs with unsaved form data
-5. **Configure notifications**:
+
+#### Focus Mode Settings
+5. **Configure focus mode behavior**:
+   - Enable focus mode on startup
+   - Auto-suspend tabs when entering focus mode
+   - Apply minimal dark theme
+   - Remove website distractions
+   - Disable animations and transitions
+   - Enable memory optimization techniques
+   - Show recommended focus extensions
+6. **View focus statistics**:
+   - Total focus time across all sessions
+   - Number of tabs suspended during focus mode
+
+#### Extension & Notification Settings
+7. **Extension monitoring**:
+   - Monitor extension memory usage
+   - Set memory threshold for extension alerts (20-200 MB)
+   - Enable smart extension suggestions
+   - Get notifications about optimization opportunities
+8. **Configure notifications**:
    - Show notifications when tabs are suspended
    - Show warnings when memory usage is high
+   - Display focus mode recommendations
 
 ## 🛠️ Technical Details
 
@@ -59,14 +120,18 @@ FastBrowse is a Chrome extension designed to minimize browser memory consumption
 
 FastBrowse uses Chrome Extension Manifest V3 with the following components:
 
-- **Background Service Worker**: Handles tab management logic and memory monitoring
-- **Popup Interface**: Provides user interface for manual tab control
-- **Options Page**: Allows configuration of all settings
+- **Background Service Worker**: Handles tab management, memory monitoring, and focus mode orchestration
+- **Popup Interface**: Provides user interface for manual tab control and focus mode management
+- **Options Page**: Allows configuration of all settings including focus mode preferences
+- **Content Scripts**: Injected into web pages for focus mode distraction removal and theme application
 - **Chrome APIs Used**:
   - `chrome.tabs` - Tab management and discarding
   - `chrome.system.memory` - Memory usage monitoring
-  - `chrome.storage` - Settings persistence
-  - `chrome.notifications` - User notifications
+  - `chrome.storage` - Settings persistence across sessions
+  - `chrome.notifications` - User notifications and alerts
+  - `chrome.management` - Extension analysis and recommendations
+  - `chrome.scripting` - Dynamic content script injection for focus mode
+  - `activeTab` - Content script access for focus enhancements
 
 ### Memory Optimization Strategy
 
@@ -81,6 +146,25 @@ FastBrowse uses Chrome Extension Manifest V3 with the following components:
    - Normal operation: Suspend tabs after configured delay
    - High memory usage: Emergency suspension of oldest inactive tabs
    - Memory critical: More aggressive suspension while respecting protections
+
+### Focus Mode Strategy
+
+1. **Site-Specific Distraction Removal**: Uses curated CSS selectors for major platforms:
+   - **YouTube**: Suggestions, comments, sidebars, end screens, and recommendations
+   - **Social Media**: News feeds, trending sections, suggested content, and ads
+   - **Professional Sites**: Marketing sections, promotional content, and non-essential sidebars
+2. **Minimal UI Theme**: Applies consistent dark theme with:
+   - Reduced visual noise and simplified color schemes
+   - Optimized contrast for better readability and reduced eye strain
+   - Consistent typography and spacing across all websites
+3. **Performance Optimizations**:
+   - **Animation Disabling**: Removes CSS animations and transitions for better focus
+   - **Image Optimization**: Compresses images and implements lazy loading for off-screen content
+   - **Memory Reduction**: Unloads non-visible images and reduces resource consumption
+4. **Extension Ecosystem Integration**:
+   - **Smart Recommendations**: Suggests complementary extensions based on browsing patterns
+   - **Priority System**: Ranks recommendations by effectiveness and user benefit
+   - **Installation Assistance**: Direct links to Chrome Web Store for recommended extensions
 
 ### Performance Considerations
 
