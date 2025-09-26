@@ -36,6 +36,8 @@ class PopupManager {
         this.frequentTagPillsElement = document.getElementById('frequent-tag-pills');
         this.activeTagPillsElement = document.getElementById('active-tag-pills');
         this.groupSuggestionsElement = document.getElementById('group-suggestions');
+        this.relationshipGroupsElement = document.getElementById('relationship-groups');
+        this.refreshRelationshipsButton = document.getElementById('refresh-relationships');
         
         // Settings elements
         this.settingsSection = document.getElementById('settings-section');
@@ -54,6 +56,12 @@ class PopupManager {
         this.setDeclutterStale = document.getElementById('set-declutter-stale');
         this.setDeclutterStaleValue = document.getElementById('set-declutter-stale-value');
         this.setDeclutterWhitelist = document.getElementById('set-declutter-whitelist');
+        this.setForecastingEnabled = document.getElementById('set-forecasting-enabled');
+        this.setForecastHorizon = document.getElementById('set-forecast-horizon');
+        this.setForecastHorizonValue = document.getElementById('set-forecast-horizon-value');
+        this.setRelationshipsEnabled = document.getElementById('set-relationships-enabled');
+        this.setRelationshipDecay = document.getElementById('set-relationship-decay');
+        this.setRelationshipDecayValue = document.getElementById('set-relationship-decay-value');
         this.setFocusMusic = document.getElementById('set-focus-music');
 
         // Declutter modal elements
@@ -159,6 +167,10 @@ class PopupManager {
             this.closeTagsSection();
         });
         
+        if (this.refreshRelationshipsButton) {
+            this.refreshRelationshipsButton.addEventListener('click', () => this.loadRelationships());
+        }
+        
         // Settings open/close
         if (this.openSettingsButton) {
             this.openSettingsButton.addEventListener('click', () => this.toggleSettingsSection(true));
@@ -185,6 +197,16 @@ class PopupManager {
         if (this.setDeclutterStale) {
             this.setDeclutterStale.addEventListener('input', () => {
                 this.setDeclutterStaleValue.textContent = this.setDeclutterStale.value;
+            });
+        }
+        if (this.setForecastHorizon) {
+            this.setForecastHorizon.addEventListener('input', () => {
+                this.setForecastHorizonValue.textContent = this.setForecastHorizon.value;
+            });
+        }
+        if (this.setRelationshipDecay) {
+            this.setRelationshipDecay.addEventListener('input', () => {
+                this.setRelationshipDecayValue.textContent = this.setRelationshipDecay.value;
             });
         }
         if (this.previewFocusMusicButton) {
@@ -397,6 +419,7 @@ class PopupManager {
         
         if (!isVisible) {
             this.updateTagsDisplay();
+            this.loadRelationships();
         }
     }
     
@@ -803,6 +826,16 @@ class PopupManager {
                     const list = Array.isArray(s.declutterWhitelist) ? s.declutterWhitelist : [];
                     this.setDeclutterWhitelist.value = list.join(', ');
                 }
+                if (this.setForecastingEnabled) this.setForecastingEnabled.checked = s.forecastingEnabled !== false;
+                if (this.setForecastHorizon) {
+                    this.setForecastHorizon.value = s.forecastHorizonMinutes ?? 3;
+                    this.setForecastHorizonValue.textContent = this.setForecastHorizon.value;
+                }
+                if (this.setRelationshipsEnabled) this.setRelationshipsEnabled.checked = s.relationshipsEnabled !== false;
+                if (this.setRelationshipDecay) {
+                    this.setRelationshipDecay.value = s.relationshipDecayMinutes ?? 60;
+                    this.setRelationshipDecayValue.textContent = this.setRelationshipDecay.value;
+                }
 
                 // Build music list (fallback to known tracks, try optional tracks.json)
                 const defaultTracks = [
@@ -939,6 +972,10 @@ class PopupManager {
                 const list = raw.split(',').map(s => s.trim()).filter(Boolean);
                 newSettings.declutterWhitelist = list;
             }
+            if (this.setForecastingEnabled) newSettings.forecastingEnabled = this.setForecastingEnabled.checked;
+            if (this.setForecastHorizon) newSettings.forecastHorizonMinutes = parseInt(this.setForecastHorizon.value);
+            if (this.setRelationshipsEnabled) newSettings.relationshipsEnabled = this.setRelationshipsEnabled.checked;
+            if (this.setRelationshipDecay) newSettings.relationshipDecayMinutes = parseInt(this.setRelationshipDecay.value);
             if (this.setFocusMusic) newSettings.focusModeMusic = this.setFocusMusic.value;
             
             const response = await this.sendMessage({ action: 'updateSettings', settings: newSettings });
@@ -952,6 +989,77 @@ class PopupManager {
             console.error('Failed to save inline settings:', e);
             this.showToast('Failed to save settings', 'error');
         }
+    }
+
+    async loadRelationships() {
+        try {
+            const resp = await this.sendMessage({ action: 'getTabRelationships' });
+            if (!resp.success) throw new Error(resp.error || 'Failed to load relationships');
+            this.renderRelationships(resp.data || []);
+        } catch (e) {
+            console.error('Failed to load relationships:', e);
+            if (this.relationshipGroupsElement) this.relationshipGroupsElement.innerHTML = '<div style="color:#999; font-size:11px;">No relationships found</div>';
+        }
+    }
+
+    renderRelationships(groups) {
+        if (!this.relationshipGroupsElement) return;
+        this.relationshipGroupsElement.innerHTML = '';
+        if (!groups || groups.length === 0) {
+            this.relationshipGroupsElement.innerHTML = '<div style="color:#999; font-size:11px;">No relationships found</div>';
+            return;
+        }
+        groups.slice(0, 5).forEach((group, idx) => {
+            const box = document.createElement('div');
+            box.style.cssText = 'border:1px solid #e0e0e0; border-radius:6px; padding:8px; margin-bottom:6px;';
+            const header = document.createElement('div');
+            header.style.cssText = 'font-weight:bold; font-size:12px; color:#333; margin-bottom:4px;';
+            header.textContent = `Group ${idx+1} (${group.tabs.length} tabs)`;
+            box.appendChild(header);
+            const list = document.createElement('div');
+            group.tabs.slice(0, 5).forEach(t => {
+                const item = document.createElement('div');
+                item.style.cssText = 'font-size:11px; color:#555; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;';
+                item.textContent = t.title || t.url || 'Untitled';
+                item.title = t.url;
+                list.appendChild(item);
+            });
+            if (group.tabs.length > 5) {
+                const more = document.createElement('div');
+                more.style.cssText = 'font-size:11px; color:#999;';
+                more.textContent = `+${group.tabs.length - 5} more`;
+                list.appendChild(more);
+            }
+            box.appendChild(list);
+            const actions = document.createElement('div');
+            actions.style.cssText = 'margin-top:6px; display:flex; gap:6px;';
+            const focusBtn = document.createElement('button');
+            focusBtn.textContent = 'Focus Group';
+            focusBtn.addEventListener('click', async () => {
+                try {
+                    await this.sendMessage({ action: 'focusRelatedTabs', tabIds: group.tabIds });
+                    this.showToast('Focused group', 'success');
+                } catch (e) {
+                    this.showToast('Failed to focus group', 'error');
+                }
+            });
+            const suspendBtn = document.createElement('button');
+            suspendBtn.className = 'secondary';
+            suspendBtn.textContent = 'Suspend Group';
+            suspendBtn.addEventListener('click', async () => {
+                try {
+                    await this.sendMessage({ action: 'suspendRelatedTabs', tabIds: group.tabIds.filter(id => !group.tabs.find(t => t.id === id)?.active) });
+                    this.showToast('Group suspended', 'success');
+                    setTimeout(() => this.loadTabList(), 500);
+                } catch (e) {
+                    this.showToast('Failed to suspend group', 'error');
+                }
+            });
+            actions.appendChild(focusBtn);
+            actions.appendChild(suspendBtn);
+            box.appendChild(actions);
+            this.relationshipGroupsElement.appendChild(box);
+        });
     }
 
     async analyzeExtensions() {

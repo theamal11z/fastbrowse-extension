@@ -744,6 +744,13 @@
                 <h4>Group Suggestions</h4>
                 <div id="group-suggestions"></div>
             </div>
+            <div class="relationships">
+                <h4>Tab Relationships</h4>
+                <div style="margin-bottom:6px;">
+                    <button id="refresh-relationships" class="secondary" style="padding:4px 8px;">Refresh</button>
+                </div>
+                <div id="relationship-groups"></div>
+            </div>
         </div>
     </div>
     
@@ -816,6 +823,36 @@
                     <span class="slider"></span>
                 </label>
                 <div class="description">Mutes non-active tabs except meetings/music domains</div>
+            </div>
+            <div class="setting-item">
+                <label>Smart Memory Forecasting</label>
+                <label class="switch">
+                    <input type="checkbox" id="set-forecasting-enabled">
+                    <span class="slider"></span>
+                </label>
+                <div class="description">Predict spikes and pre-emptively suspend to avoid hits</div>
+            </div>
+            <div class="setting-item">
+                <label>Forecast horizon (minutes)</label>
+                <div class="range-container">
+                    <input type="range" id="set-forecast-horizon" min="1" max="10" value="3">
+                    <span class="range-value" id="set-forecast-horizon-value">3</span>
+                </div>
+            </div>
+            <div class="setting-item">
+                <label>Tab relationships (auto-map)</label>
+                <label class="switch">
+                    <input type="checkbox" id="set-relationships-enabled">
+                    <span class="slider"></span>
+                </label>
+                <div class="description">Map link-opened chains to keep research context</div>
+            </div>
+            <div class="setting-item">
+                <label>Relationship decay (minutes)</label>
+                <div class="range-container">
+                    <input type="range" id="set-relationship-decay" min="10" max="240" value="60">
+                    <span class="range-value" id="set-relationship-decay-value">60</span>
+                </div>
             </div>
             <div class="setting-item">
                 <label>Declutter stale threshold (minutes)</label>

@@ -18,6 +18,16 @@ class FastBrowse {
             memoryMinUnsuspendedTabs: 5,
             memoryFocusGraceMinutes: 3,
             memoryHighStreak: 3,
+            // Smart memory forecasting
+            forecastingEnabled: true,
+            forecastLookbackMinutes: 10,
+            forecastHorizonMinutes: 3,
+            forecastBufferPercent: 3,
+            forecastPreemptiveMax: 3,
+            leakSpikeDeltaPercent: 8,
+            leakSpikeWindowMinutes: 3,
+            leakDomainThreshold: 3,
+            leakFastSuspendMinutes: 5,
             // Extension monitoring settings
             extensionMonitoring: true,
             extensionMemoryThreshold: 50, // MB
@@ -46,7 +56,10 @@ class FastBrowse {
             tagBasedSuspension: true,
             tagSuggestions: true,
             maxTagsPerTab: 5,
-            tagInactivityDays: 30 // Days before a tag is considered inactive
+            tagInactivityDays: 30, // Days before a tag is considered inactive
+            // Tab relationships
+            relationshipsEnabled: true,
+            relationshipDecayMinutes: 60
         };
         
         this.suspendedTabs = new Map();
@@ -60,6 +73,13 @@ class FastBrowse {
         // Smart memory tracking
         this.highMemStreak = 0;
         this.lastChromeFocusAt = 0;
+        this.memoryHistory = []; // {ts, usedPercent, tabCount}
+        this.tabOpenEvents = []; // {ts, domain}
+        this.leakDomainScores = new Map(); // domain -> score
+        this.leakProneDomains = new Set();
+        
+        // Tab relationship mapping
+        this.relationships = new Map(); // fromTabId -> Map(toTabId -> ts)
         
         // Declutter snapshot for undo
         this.lastDeclutterSnapshot = null;
@@ -136,6 +156,13 @@ class FastBrowse {
     async init() {
         // Load settings from storage
         await this.loadSettings();
+        // Load learned leak domains
+        try {
+            const stored = await chrome.storage.local.get(['fastbrowse_leak_domains']);
+            if (stored.fastbrowse_leak_domains && Array.isArray(stored.fastbrowse_leak_domains)) {
+                stored.fastbrowse_leak_domains.forEach(d => this.leakProneDomains.add(d));
+            }
+        } catch (e) { console.debug('No leak domains yet'); }
         
         // Set up event listeners
         this.setupEventListeners();
@@ -184,6 +211,27 @@ class FastBrowse {
         // Listen for tab updates
         chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
             this.onTabUpdated(tabId, changeInfo, tab);
+            // Record domain when URL becomes available
+            try {
+                if (changeInfo.url || (changeInfo.status === 'complete' && tab.url)) {
+                    const urlStr = changeInfo.url || tab.url;
+                    const u = new URL(urlStr);
+                    const domain = u.hostname.replace('www.', '');
+                    this.recordTabOpen(domain);
+                }
+            } catch (_) {}
+        });
+        
+        // Listen for tab creation
+        chrome.tabs.onCreated.addListener((tab) => {
+            try {
+                const urlStr = tab.pendingUrl || tab.url || '';
+                if (urlStr) {
+                    const u = new URL(urlStr);
+                    const domain = u.hostname.replace('www.', '');
+                    this.recordTabOpen(domain);
+                }
+            } catch (_) {}
         });
         
         // Listen for tab removal
@@ -209,6 +257,23 @@ class FastBrowse {
         
         // Setup context menus
         this.setupContextMenus();
+
+        // Setup webNavigation listeners for relationship mapping
+        if (this.settings.relationshipsEnabled) {
+            try {
+                chrome.webNavigation.onCreatedNavigationTarget.addListener((details) => {
+                    // Link opened to a new tab
+                    if (details.sourceTabId != null && details.tabId != null) {
+                        this.addRelationship(details.sourceTabId, details.tabId);
+                    }
+                });
+                chrome.webNavigation.onCommitted.addListener((details) => {
+                    // Same-tab navigation via link/form can imply relation with previous tab via opener; skip without clear source
+                });
+            } catch (e) {
+                console.debug('webNavigation mapping not available:', e);
+            }
+        }
     }
     
     // Notification event handlers
@@ -279,6 +344,15 @@ class FastBrowse {
     }
     
     onTabRemoved(tabId) {
+        // Cleanup relationships
+        try {
+            if (this.relationships.has(tabId)) this.relationships.delete(tabId);
+            // Remove references where tabId is a target
+            for (const [fromId, targets] of this.relationships.entries()) {
+                if (targets.has(tabId)) targets.delete(tabId);
+                if (targets.size === 0) this.relationships.delete(fromId);
+            }
+        } catch (_) {}
         this.updateActionBadge().catch(() => {});
         this.clearTabTimer(tabId);
         this.suspendedTabs.delete(tabId);
@@ -642,7 +716,11 @@ class FastBrowse {
         // Check memory usage every 30 seconds
         setInterval(() => {
             this.checkMemoryUsage();
+            this.recordMemorySample().catch(() => {});
+            this.smartForecastAndAct().catch(() => {});
         }, 30000);
+        // Initial sample
+        this.recordMemorySample().catch(() => {});
     }
     
     startExtensionMonitoring() {
@@ -1827,6 +1905,170 @@ class FastBrowse {
         }
     }
     
+    // Relationship helpers
+    addRelationship(fromId, toId) {
+        try {
+            if (!this.settings.relationshipsEnabled) return;
+            if (!this.relationships.has(fromId)) this.relationships.set(fromId, new Map());
+            this.relationships.get(fromId).set(toId, Date.now());
+        } catch (_) {}
+    }
+
+    getRelationshipComponents = async () => {
+        try {
+            if (!this.settings.relationshipsEnabled) return [];
+            const decay = (this.settings.relationshipDecayMinutes || 60) * 60 * 1000;
+            const now = Date.now();
+            // Build undirected graph among existing tabs
+            const tabs = await chrome.tabs.query({});
+            const tabSet = new Set(tabs.map(t => t.id));
+            const adj = new Map();
+            for (const id of tabSet) adj.set(id, new Set());
+            for (const [fromId, targets] of this.relationships.entries()) {
+                for (const [toId, ts] of targets.entries()) {
+                    if (now - ts > decay) continue; // expired
+                    if (!tabSet.has(fromId) || !tabSet.has(toId)) continue;
+                    if (!adj.has(fromId)) adj.set(fromId, new Set());
+                    if (!adj.has(toId)) adj.set(toId, new Set());
+                    adj.get(fromId).add(toId);
+                    adj.get(toId).add(fromId);
+                }
+            }
+            // Components
+            const seen = new Set();
+            const components = [];
+            for (const id of tabSet) {
+                if (seen.has(id)) continue;
+                const comp = [];
+                const stack = [id];
+                seen.add(id);
+                while (stack.length) {
+                    const cur = stack.pop();
+                    comp.push(cur);
+                    const neigh = adj.get(cur) || new Set();
+                    for (const n of neigh) {
+                        if (!seen.has(n)) { seen.add(n); stack.push(n); }
+                    }
+                }
+                if (comp.length > 1) components.push(comp);
+            }
+            return components;
+        } catch (e) {
+            console.debug('getRelationshipComponents failed:', e);
+            return [];
+        }
+    }
+
+    // Memory forecasting helpers
+    async recordMemorySample() {
+        try {
+            const mem = await chrome.system.memory.getInfo();
+            const usedPercent = ((mem.capacity - mem.availableCapacity) / mem.capacity) * 100;
+            const tabs = await chrome.tabs.query({});
+            const sample = { ts: Date.now(), usedPercent, tabCount: tabs.length };
+            this.memoryHistory.push(sample);
+            // Keep last 200 samples (~100 mins)
+            if (this.memoryHistory.length > 200) this.memoryHistory.shift();
+        } catch (_) {}
+    }
+
+    recordTabOpen(domain) {
+        if (!domain) return;
+        const now = Date.now();
+        this.tabOpenEvents.push({ ts: now, domain });
+        // Keep last 300 events
+        if (this.tabOpenEvents.length > 300) this.tabOpenEvents.shift();
+    }
+
+    getRecentSamples(minutes) {
+        const cutoff = Date.now() - minutes * 60 * 1000;
+        return this.memoryHistory.filter(s => s.ts >= cutoff);
+    }
+
+    computeSlopePercentPerMinute(samples) {
+        if (samples.length < 2) return 0;
+        const first = samples[0];
+        const last = samples[samples.length - 1];
+        const dtMin = (last.ts - first.ts) / 60000;
+        if (dtMin <= 0) return 0;
+        return (last.usedPercent - first.usedPercent) / dtMin;
+    }
+
+    async smartForecastAndAct() {
+        if (!this.settings.forecastingEnabled) return;
+        const lookback = this.settings.forecastLookbackMinutes || 10;
+        const horizon = this.settings.forecastHorizonMinutes || 3;
+        const buffer = this.settings.forecastBufferPercent || 3;
+        const samples = this.getRecentSamples(lookback);
+        if (samples.length < 2) return;
+        const slope = this.computeSlopePercentPerMinute(samples);
+        const current = samples[samples.length - 1].usedPercent;
+        const forecast = current + slope * (horizon);
+        const limit = this.settings.memoryLimit - buffer;
+        if (forecast > limit) {
+            await this.preemptiveSuspend();
+        }
+        // Spike detection
+        this.detectSpikeAndLearn(samples).catch(() => {});
+    }
+
+    async preemptiveSuspend() {
+        try {
+            const maxCount = Math.max(1, this.settings.forecastPreemptiveMax || 3);
+            const tabs = await chrome.tabs.query({ active: false });
+            const candidates = [];
+            for (const tab of tabs) {
+                if (await this.shouldProtectTab(tab)) continue;
+                candidates.push(tab);
+            }
+            // Prefer leak‑prone domains first, then oldest
+            candidates.sort((a, b) => {
+                const ad = this.isDomainInList(a.url || '', Array.from(this.leakProneDomains)) ? -1 : 0;
+                const bd = this.isDomainInList(b.url || '', Array.from(this.leakProneDomains)) ? -1 : 0;
+                if (ad !== bd) return ad - bd;
+                return (a.lastAccessed || 0) - (b.lastAccessed || 0);
+            });
+            const toSuspend = candidates.slice(0, maxCount);
+            for (const t of toSuspend) {
+                await this.suspendTab(t.id);
+            }
+            if (toSuspend.length > 0 && this.settings.showNotifications) {
+                this.showNotification(`⚡ Pre‑emptive memory save: suspended ${toSuspend.length} tab(s) to avoid spike`);
+            }
+        } catch (e) {
+            console.debug('preemptiveSuspend failed:', e);
+        }
+    }
+
+    async detectSpikeAndLearn(samples) {
+        const windowMin = this.settings.leakSpikeWindowMinutes || 3;
+        const deltaThreshold = this.settings.leakSpikeDeltaPercent || 8;
+        const recent = this.getRecentSamples(windowMin);
+        if (recent.length < 2) return;
+        const first = recent[0];
+        const last = recent[recent.length - 1];
+        const delta = last.usedPercent - first.usedPercent;
+        if (delta < deltaThreshold) return;
+        // Spike detected: attribute to domains opened in this window
+        const cutoff = Date.now() - windowMin * 60 * 1000;
+        const events = this.tabOpenEvents.filter(e => e.ts >= cutoff);
+        const incr = new Set();
+        events.forEach(e => incr.add(e.domain));
+        incr.forEach(domain => {
+            const cur = this.leakDomainScores.get(domain) || 0;
+            const next = cur + 1;
+            this.leakDomainScores.set(domain, next);
+            if (next >= (this.settings.leakDomainThreshold || 3)) {
+                if (!this.leakProneDomains.has(domain)) {
+                    this.leakProneDomains.add(domain);
+                    this.showNotification(`🧠 Learned memory‑heavy site: ${domain}. Will suspend earlier when needed.`);
+                    // Persist
+                    chrome.storage.local.set({ fastbrowse_leak_domains: Array.from(this.leakProneDomains) });
+                }
+            }
+        });
+    }
+
     // Smart Mute helpers
     async smartMuteEvaluate(tab) {
         try {
@@ -2585,6 +2827,60 @@ class FastBrowse {
                     }
                     break;
                     
+                case 'getTabRelationships':
+                    try {
+                        const comps = await this.getRelationshipComponents();
+                        // Return with simple metadata
+                        const result = [];
+                        for (const comp of comps) {
+                            const tabs = [];
+                            for (const id of comp) {
+                                try { tabs.push(await chrome.tabs.get(id)); } catch (_) {}
+                            }
+                            result.push({ tabIds: comp, tabs });
+                        }
+                        sendResponse({ success: true, data: result });
+                    } catch (error) {
+                        console.error('Failed to get tab relationships:', error);
+                        sendResponse({ success: false, error: error.message });
+                    }
+                    break;
+
+                case 'focusRelatedTabs':
+                    try {
+                        const tabIds = request.tabIds || [];
+                        // Pick most recently accessed tab to focus
+                        let best = null;
+                        for (const id of tabIds) {
+                            try {
+                                const t = await chrome.tabs.get(id);
+                                if (!best || (t.lastAccessed || 0) > (best.lastAccessed || 0)) best = t;
+                            } catch (_) {}
+                        }
+                        if (best) {
+                            await chrome.tabs.update(best.id, { active: true });
+                            await chrome.windows.update(best.windowId, { focused: true });
+                        }
+                        sendResponse({ success: true });
+                    } catch (error) {
+                        console.error('Failed to focus related tabs:', error);
+                        sendResponse({ success: false, error: error.message });
+                    }
+                    break;
+
+                case 'suspendRelatedTabs':
+                    try {
+                        const tabIds = request.tabIds || [];
+                        for (const id of tabIds) {
+                            try { await this.suspendTab(id); } catch (_) {}
+                        }
+                        sendResponse({ success: true });
+                    } catch (error) {
+                        console.error('Failed to suspend related tabs:', error);
+                        sendResponse({ success: false, error: error.message });
+                    }
+                    break;
+
                 case 'createTagGroup':
                     try {
                         const groupId = await this.createTagGroup(
