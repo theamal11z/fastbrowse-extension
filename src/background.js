@@ -79,14 +79,6 @@ class FastBrowse {
         
         // Recommended focus extensions database
         this.recommendedFocusExtensions = new Map([
-            ['ublock-origin', {
-                name: 'uBlock Origin',
-                id: 'cjpalhdlnbpafiamejdnhcphjbkeiagm',
-                webstoreUrl: 'https://chrome.google.com/webstore/detail/ublock-origin/cjpalhdlnbpafiamejdnhcphjbkeiagm',
-                description: 'Advanced ad and tracker blocker',
-                priority: 10,
-                category: 'blocking'
-            }],
             ['df-youtube', {
                 name: 'DF YouTube (Distraction Free)',
                 id: 'mjdepdfccjgcndkmemponafgioodelna',
@@ -2007,20 +1999,35 @@ class FastBrowse {
     async getFocusExtensionRecommendations() {
         try {
             const installedExtensions = await chrome.management.getAll();
-            const installedIds = new Set(installedExtensions
-                .filter(ext => ext.enabled)
-                .map(ext => ext.id)
-            );
-            
+            const installedIds = new Set(installedExtensions.map(ext => ext.id));
+            const enabledIds = new Set(installedExtensions.filter(ext => ext.enabled).map(ext => ext.id));
+
+            // Build simple category satisfaction map by scanning installed extension names
+            const nameLower = (s) => (s || '').toLowerCase();
+            const installedNames = installedExtensions.map(ext => nameLower(ext.name));
+            const categorySatisfied = {
+                'blocking': installedNames.some(n => /ublock|adblock|ad guard|adguard|privacy badger|ghostery|ad\s*blocker/.test(n)),
+                'social-media': installedNames.some(n => /df youtube|distraction\s*free|news feed eradicator|hide feed|no (youtube|facebook) suggestions|productivity for (facebook|twitter)/.test(n)),
+                'time-management': installedNames.some(n => /stayfocusd|leechblock|pomodoro|forest|limit|time\s*warp|focus\s*time/.test(n)),
+                'productivity': installedNames.some(n => /momentum|new tab (dashboard|page)|infinity new tab|toby|start (me|page)/.test(n))
+            };
+
             const recommendations = [];
-            
+
             for (const [key, extension] of this.recommendedFocusExtensions) {
-                if (!installedIds.has(extension.id)) {
+                const isInstalled = installedIds.has(extension.id);
+                const isEnabled = enabledIds.has(extension.id);
+                const satisfiedByAlternative = !isInstalled && !!categorySatisfied[extension.category];
+                const altName = satisfiedByAlternative ? installedExtensions.find(ext => nameLower(ext.name)).name : undefined;
+
+                if (!isInstalled) {
                     recommendations.push({
                         key,
                         ...extension,
                         installed: false,
-                        enabled: false
+                        enabled: false,
+                        satisfiedByAlternative,
+                        altName: satisfiedByAlternative ? 'Alternative installed' : undefined
                     });
                 } else {
                     const installedExt = installedExtensions.find(e => e.id === extension.id);
@@ -2028,13 +2035,14 @@ class FastBrowse {
                         key,
                         ...extension,
                         installed: true,
-                        enabled: installedExt?.enabled || false
+                        enabled: installedExt?.enabled || false,
+                        satisfiedByAlternative: false
                     });
                 }
             }
-            
+
             return recommendations.sort((a, b) => b.priority - a.priority);
-            
+
         } catch (error) {
             console.error('Failed to get focus extension recommendations:', error);
             return [];
@@ -2044,16 +2052,14 @@ class FastBrowse {
     async checkMissingFocusExtensions() {
         try {
             const recommendations = await this.getFocusExtensionRecommendations();
-            const missing = recommendations.filter(ext => !ext.installed && ext.priority >= 8);
+            const missing = recommendations.filter(ext => !ext.installed && !ext.satisfiedByAlternative && ext.priority >= 8);
             
             if (missing.length > 0 && this.settings.showNotifications) {
                 const topMissing = missing[0];
                 this.showNotification(
                     `💡 Focus Tip: Install ${topMissing.name} for better distraction blocking`,
                     {
-                        buttons: [{
-                            title: 'Install'
-                        }],
+                        buttons: [{ title: 'Install' }],
                         eventTime: Date.now() + 5000,
                         requireInteraction: true
                     }

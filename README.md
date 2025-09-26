@@ -7,6 +7,7 @@ FastBrowse is a powerful Chrome extension designed to minimize browser memory co
 ### 📑 Memory Management
 - **Automatic Tab Suspension**: Intelligently suspends inactive tabs using Chrome's built-in tab discarding API
 - **Smart Memory Monitoring**: Continuously monitors system memory usage and takes action when thresholds are exceeded
+- **Smart Memory Alerts (context-aware)**: Only warns/acts on sustained pressure when Chrome is likely responsible (recent Chrome focus + enough unsuspended tabs)
 - **Tab Protection**: Automatically protects pinned tabs, tabs playing audio, and system pages
 - **Extension Memory Analysis**: Identifies memory-heavy extensions and provides optimization suggestions
 - **Emergency Suspend**: Automatically suspends tabs during high memory pressure situations
@@ -17,14 +18,23 @@ FastBrowse is a powerful Chrome extension designed to minimize browser memory co
 - **Animation Disabling**: Removes animations and transitions for better focus and performance
 - **Memory Optimization**: Advanced techniques including image compression and lazy loading
 - **Auto-Suspend Integration**: Automatically suspends background tabs when entering focus mode
-- **Extension Recommendations**: Suggests complementary focus extensions (uBlock Origin, DF YouTube, etc.)
+- **Ambient Focus Music**: Optional background music from assets with in-popup Preview; starts/stops with Focus Mode
+- **Extension Recommendations**: Suggests complementary focus extensions (e.g., DF YouTube, News Feed Eradicator) and avoids suggesting ones you already have or suitable alternatives
 
 ### 🖥️ Interface & Usability
 - **Clean Interface**: Minimalist popup UI with real-time statistics and focus mode controls
 - **Memory Usage Display**: Live memory usage monitoring with color-coded indicators
 - **Focus Statistics**: Track focus time and productivity metrics
-- **One-Click Controls**: Easy toggle for focus mode and quick tab management
+- **Auto-Group Tabs button**: One-click analysis to suggest tab groups by domain, tags, usage, or time patterns
+- **In-Popup Settings Panel**: Open via the ⚙️ in the header or Tags section; includes Focus Music, smart memory controls, and tag toggles
+- **Non-blocking Toasts**: Friendly, unobtrusive success/error feedback
 - **Configurable Settings**: Fully customizable behavior for all features
+
+### 🏷️ Tag System & Auto Grouping
+- **Auto-Tagging**: Suggests and applies tags based on domain, title, and history
+- **Tag Filters**: View All, Frequent, Active, or a specific tag
+- **Group Suggestions**: Top suggestions with reasons and quick “Create Group”/Dismiss actions
+- **Inline Tag Pills**: Color-coded pills with usage frequency
 
 ### 🔒 Privacy & Performance
 - **Zero Tracking**: No third-party analytics or data collection
@@ -54,7 +64,8 @@ FastBrowse is a powerful Chrome extension designed to minimize browser memory co
 3. **See all your tabs** organized by window with suspension status
 4. **Manually suspend/restore** individual tabs using the buttons
 5. **Suspend all inactive tabs** with one click using "Suspend All Tabs"
-6. **Analyze extensions** to identify memory-heavy extensions and get optimization suggestions
+6. **Auto-Group Tabs** using the button in the popup; review suggestions and create groups you like
+7. **Analyze extensions** to identify memory-heavy extensions and get optimization suggestions
 
 ### 🎯 Focus Mode Usage
 
@@ -62,8 +73,9 @@ FastBrowse is a powerful Chrome extension designed to minimize browser memory co
 2. **Watch distractions disappear** automatically across all your open tabs
 3. **Enjoy the minimal theme** that reduces eye strain and visual noise
 4. **Track your productivity** with real-time focus time and tab suspension statistics
-5. **Get extension recommendations** for enhanced focus (uBlock Origin, DF YouTube, etc.)
-6. **Disable Focus Mode** anytime to restore the original browsing experience
+5. **Optionally play ambient Focus Music**: choose a track in Settings and click Preview; music starts/stops with Focus Mode
+6. **Get extension recommendations** for enhanced focus (e.g., DF YouTube, News Feed Eradicator); we won’t suggest ones you already have
+7. **Disable Focus Mode** anytime to restore the original browsing experience
 
 #### Focus Mode Benefits:
 - ✨ **YouTube**: Removes suggestions, comments, and sidebar distractions
@@ -76,6 +88,16 @@ FastBrowse is a powerful Chrome extension designed to minimize browser memory co
 
 ### Settings Configuration
 
+#### Quick Settings (in the Popup)
+- Click the **⚙️ Settings** button in the popup header (next to the tag icon) or in the Tags section
+- Adjust common settings quickly:
+  - Auto-suspend toggle and delay
+  - Smart memory alerts and threshold
+  - Tags system toggle
+  - Focus Mode music selection with Preview
+- Click Save
+
+#### Full Options Page
 1. **Right-click the FastBrowse icon** and select "Options" (or click the options link in the popup)
 
 #### Memory Management Settings
@@ -131,6 +153,7 @@ FastBrowse uses Chrome Extension Manifest V3 with the following components:
   - `chrome.notifications` - User notifications and alerts
   - `chrome.management` - Extension analysis and recommendations
   - `chrome.scripting` - Dynamic content script injection for focus mode
+  - `chrome.offscreen` - Background audio playback for Focus Music (MV3-offscreen document)
   - `activeTab` - Content script access for focus enhancements
 
 ### Memory Optimization Strategy
@@ -146,6 +169,9 @@ FastBrowse uses Chrome Extension Manifest V3 with the following components:
    - Normal operation: Suspend tabs after configured delay
    - High memory usage: Emergency suspension of oldest inactive tabs
    - Memory critical: More aggressive suspension while respecting protections
+4. **Smart Memory Alerts**:
+   - Requires sustained high memory across checks
+   - Suppresses alerts/actions unless Chrome had recent focus and there are enough unsuspended tabs
 
 ### Focus Mode Strategy
 
@@ -191,11 +217,14 @@ fastbrowse-extension/
 │   ├── popup.html         # Popup interface HTML
 │   ├── popup.js           # Popup functionality
 │   ├── options.html       # Options page HTML
-│   └── options.js         # Options page functionality
+│   ├── options.js         # Options page functionality
+│   ├── offscreen.html     # Offscreen document for Focus Music playback
+│   └── offscreen.js       # Offscreen audio controller
 ├── assets/
 │   ├── icon16.png         # 16x16 extension icon
 │   ├── icon48.png         # 48x48 extension icon
-│   └── icon128.png        # 128x128 extension icon
+│   ├── icon128.png        # 128x128 extension icon
+│   └── music/             # Focus Mode music assets (MP3/OGG/WAV)
 └── README.md              # This file
 ```
 
@@ -229,7 +258,10 @@ fastbrowse-extension/
 - [ ] Automatic suspension works after configured delay
 - [ ] Protected tabs (pinned, audio, active) are not suspended
 - [ ] Memory threshold suspension triggers correctly
-- [ ] Settings save and load properly
+- [ ] Smart memory alerts suppress false warnings when Chrome is idle
+- [ ] Auto-Group Tabs shows suggestions and Create Group works
+- [ ] Settings (inline) save and load properly
+- [ ] Focus Music: Preview works and music plays/stops with Focus Mode
 - [ ] Notifications display when enabled
 
 ### Memory Impact Testing
