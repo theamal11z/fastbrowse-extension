@@ -13,6 +13,11 @@ class FastBrowse {
             protectForms: true,
             showNotifications: true, // Enable notifications by default for debugging
             memoryWarnings: true,
+            // Smart memory alerts
+            memorySmartMode: true,
+            memoryMinUnsuspendedTabs: 5,
+            memoryFocusGraceMinutes: 3,
+            memoryHighStreak: 3,
             // Extension monitoring settings
             extensionMonitoring: true,
             extensionMemoryThreshold: 50, // MB
@@ -26,6 +31,8 @@ class FastBrowse {
             focusDisableAnimations: true,
             focusMemoryOptimization: true,
             focusExtensionRecommendations: true,
+            // Focus mode audio
+            focusModeMusic: 'none', // 'none' or path like assets/music/FocusFlow.mp3
             // Tag management settings
             tagsEnabled: true,
             autoTagging: true,
@@ -43,6 +50,10 @@ class FastBrowse {
         this.extensionMemoryData = new Map();
         this.extensionSuggestions = new Map();
         this.lastExtensionCheck = 0;
+        
+        // Smart memory tracking
+        this.highMemStreak = 0;
+        this.lastChromeFocusAt = 0;
         
         // Focus mode state
         this.focusModeActive = false;
@@ -216,6 +227,8 @@ class FastBrowse {
     }
     
     async onTabActivated(activeInfo) {
+        // Record recent Chrome interaction (used for smart memory gating)
+        this.lastChromeFocusAt = Date.now();
         const tab = await chrome.tabs.get(activeInfo.tabId);
         
         // Clear suspend timer for active tab
@@ -273,6 +286,10 @@ class FastBrowse {
     }
     
     async onWindowFocusChanged(windowId) {
+        // Track last time any Chrome window gained focus (used for smart memory gating)
+        if (windowId !== chrome.windows.WINDOW_ID_NONE) {
+            this.lastChromeFocusAt = Date.now();
+        }
         if (windowId !== chrome.windows.WINDOW_ID_NONE && this.settings.autoSuspend) {
             // Update timers for all tabs in the focused window
             await this.updateTabTimers(windowId);
@@ -637,14 +654,40 @@ class FastBrowse {
             const memoryInfo = await chrome.system.memory.getInfo();
             const usagePercent = ((memoryInfo.capacity - memoryInfo.availableCapacity) / memoryInfo.capacity) * 100;
             
-            if (usagePercent > this.settings.memoryLimit) {
-                if (this.settings.memoryWarnings) {
-                    this.showNotification(`High memory usage detected: ${usagePercent.toFixed(1)}%`);
+            const overLimit = usagePercent > this.settings.memoryLimit;
+            if (!overLimit) {
+                // Reset streak when usage goes back under limit
+                this.highMemStreak = 0;
+                return;
+            }
+            
+            if (this.settings.memorySmartMode) {
+                // Require persistence over multiple checks
+                this.highMemStreak = (this.highMemStreak || 0) + 1;
+                const requiredStreak = Math.max(1, this.settings.memoryHighStreak || 3);
+                if (this.highMemStreak < requiredStreak) {
+                    return; // wait for sustained pressure
                 }
                 
-                // Suspend some tabs to free memory
-                await this.emergencySuspend();
+                // Assess Chrome context: recent focus and enough unsuspended tabs
+                const tabs = await chrome.tabs.query({});
+                const normalTabs = tabs.filter(t => t.url && !t.url.startsWith('chrome://') && !t.url.startsWith('chrome-extension://'));
+                const unsuspendedCount = normalTabs.filter(t => !t.discarded && !this.suspendedTabs.has(t.id)).length;
+                const minUnsuspended = Math.max(1, this.settings.memoryMinUnsuspendedTabs || 5);
+                const hasRecentChromeFocus = (Date.now() - (this.lastChromeFocusAt || 0)) < ((this.settings.memoryFocusGraceMinutes || 3) * 60 * 1000);
+                
+                // If browser seems idle or not likely the culprit, suppress warnings/suspension
+                if (unsuspendedCount < minUnsuspended || !hasRecentChromeFocus) {
+                    return;
+                }
             }
+            
+            if (this.settings.memoryWarnings) {
+                this.showNotification(`High memory usage detected: ${usagePercent.toFixed(1)}%`);
+            }
+            
+            // Suspend some tabs to free memory
+            await this.emergencySuspend();
         } catch (error) {
             console.error('Failed to check memory usage:', error);
         }
@@ -1773,6 +1816,47 @@ class FastBrowse {
     }
     
     // Focus Mode Implementation
+    async ensureOffscreen() {
+        try {
+            const has = await chrome.offscreen.hasDocument?.();
+            if (!has) {
+                await chrome.offscreen.createDocument({
+                    url: chrome.runtime.getURL('src/offscreen.html'),
+                    reasons: ['AUDIO_PLAYBACK'],
+                    justification: 'Play ambient focus music while Focus Mode is enabled'
+                });
+            }
+        } catch (e) {
+            console.debug('Offscreen ensure failed (may still exist):', e);
+        }
+    }
+
+    async closeOffscreen() {
+        try {
+            await chrome.offscreen.closeDocument?.();
+        } catch (e) {
+            console.debug('Offscreen close failed:', e);
+        }
+    }
+
+    async playFocusMusic(trackPath) {
+        if (!trackPath || trackPath === 'none') return;
+        await this.ensureOffscreen();
+        try {
+            await chrome.runtime.sendMessage({ action: 'focusMusicPlay', track: trackPath, volume: 0.25 });
+        } catch (e) {
+            console.debug('Failed to send focusMusicPlay:', e);
+        }
+    }
+
+    async stopFocusMusic() {
+        try {
+            await chrome.runtime.sendMessage({ action: 'focusMusicStop' });
+        } catch (e) {
+            console.debug('Failed to send focusMusicStop:', e);
+        }
+    }
+
     async enableFocusMode() {
         try {
             this.focusModeActive = true;
@@ -1795,6 +1879,11 @@ class FastBrowse {
             // Show notification
             if (this.settings.showNotifications) {
                 this.showNotification('🎯 Focus Mode Enabled - Distractions removed');
+            }
+
+            // Start focus music if configured
+            if (this.settings.focusModeMusic && this.settings.focusModeMusic !== 'none') {
+                await this.playFocusMusic(this.settings.focusModeMusic);
             }
             
             // Check for recommended extensions
@@ -1829,6 +1918,9 @@ class FastBrowse {
             // Remove focus mode from all existing tabs
             await this.removeFocusModeFromAllTabs();
             
+            // Stop focus music if any
+            await this.stopFocusMusic();
+
             // Show notification
             if (this.settings.showNotifications) {
                 const timeActiveMinutes = Math.round(this.focusModeStats.timeActive / 60000);
@@ -2042,6 +2134,18 @@ class FastBrowse {
                     console.log('Updating settings:', request.settings);
                     this.settings = { ...this.settings, ...request.settings };
                     await chrome.storage.sync.set(this.settings);
+
+                    // If focus mode is active and music setting changed, update playback
+                    if (request.settings && Object.prototype.hasOwnProperty.call(request.settings, 'focusModeMusic')) {
+                        if (this.focusModeActive) {
+                            if (this.settings.focusModeMusic && this.settings.focusModeMusic !== 'none') {
+                                await this.playFocusMusic(this.settings.focusModeMusic);
+                            } else {
+                                await this.stopFocusMusic();
+                            }
+                        }
+                    }
+
                     sendResponse({ success: true });
                     break;
                     
@@ -2080,6 +2184,23 @@ class FastBrowse {
                     }
                     break;
                     
+                case 'previewFocusMusic':
+                    try {
+                        const track = request.track || this.settings.focusModeMusic || 'none';
+                        const duration = Math.min(Math.max(Number(request.durationMs || 10000), 2000), 60000);
+                        if (track === 'none') {
+                            await this.stopFocusMusic();
+                        } else {
+                            await this.ensureOffscreen();
+                            await chrome.runtime.sendMessage({ action: 'focusMusicPreview', track: track, durationMs: duration, volume: 0.25 });
+                        }
+                        sendResponse({ success: true });
+                    } catch (error) {
+                        console.error('Preview focus music failed:', error);
+                        sendResponse({ success: false, error: error.message });
+                    }
+                    break;
+
                 case 'disableExtension':
                     try {
                         if (!request.extensionId) {

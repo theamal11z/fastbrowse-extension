@@ -10,6 +10,7 @@ class OptionsManager {
             memoryThreshold: document.getElementById('memory-threshold'),
             memoryLimit: document.getElementById('memory-limit'),
             memoryLimitValue: document.getElementById('memory-limit-value'),
+            memorySmartMode: document.getElementById('memory-smart-mode'),
             protectPinned: document.getElementById('protect-pinned'),
             protectAudio: document.getElementById('protect-audio'),
             protectForms: document.getElementById('protect-forms'),
@@ -140,6 +141,7 @@ class OptionsManager {
                 this.elements.memoryThreshold.checked = settings.memoryThreshold;
                 this.elements.memoryLimit.value = settings.memoryLimit;
                 this.elements.memoryLimitValue.textContent = settings.memoryLimit;
+                this.elements.memorySmartMode.checked = settings.memorySmartMode !== false;
                 this.elements.protectPinned.checked = settings.protectPinned;
                 this.elements.protectAudio.checked = settings.protectAudio;
                 this.elements.protectForms.checked = settings.protectForms;
@@ -189,6 +191,7 @@ class OptionsManager {
                 suspendDelay: parseInt(this.elements.suspendDelay.value),
                 memoryThreshold: this.elements.memoryThreshold.checked,
                 memoryLimit: parseInt(this.elements.memoryLimit.value),
+                memorySmartMode: this.elements.memorySmartMode.checked,
                 protectPinned: this.elements.protectPinned.checked,
                 protectAudio: this.elements.protectAudio.checked,
                 protectForms: this.elements.protectForms.checked,

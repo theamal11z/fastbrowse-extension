@@ -109,6 +109,12 @@
         </label>
         <div class="description">Automatically suspend tabs when system memory usage exceeds the threshold</div>
         
+        <label>
+            <input type="checkbox" id="memory-smart-mode"> 
+            Smart memory alerts (only alert when Chrome is likely responsible)
+        </label>
+        <div class="description">Reduce false alerts by requiring recent Chrome activity and enough active tabs</div>
+        
         <label>Memory threshold (%):</label>
         <div class="range-container">
             <input type="range" id="memory-limit" min="60" max="95" value="80">

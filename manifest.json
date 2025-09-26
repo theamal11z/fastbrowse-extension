@@ -12,7 +12,8 @@
     "management",
     "activeTab",
     "scripting",
-    "contextMenus"
+    "contextMenus",
+    "offscreen"
   ],
   
   "background": {
@@ -52,7 +53,7 @@
   
   "web_accessible_resources": [
     {
-      "resources": ["assets/*", "src/content/*"],
+      "resources": ["assets/*", "src/content/*", "src/offscreen.html", "src/offscreen.js"],
       "matches": ["<all_urls>"]
     }
   ],

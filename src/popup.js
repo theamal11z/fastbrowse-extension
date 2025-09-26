@@ -36,6 +36,22 @@ class PopupManager {
         this.activeTagPillsElement = document.getElementById('active-tag-pills');
         this.groupSuggestionsElement = document.getElementById('group-suggestions');
         
+        // Settings elements
+        this.settingsSection = document.getElementById('settings-section');
+        this.openSettingsButton = document.getElementById('open-settings');
+        this.openSettingsTopButton = document.getElementById('open-settings-top');
+        this.saveSettingsButton = document.getElementById('save-settings');
+        this.closeSettingsButton = document.getElementById('close-settings');
+        this.setAutoSuspend = document.getElementById('set-auto-suspend');
+        this.setSuspendDelay = document.getElementById('set-suspend-delay');
+        this.setSuspendDelayValue = document.getElementById('set-suspend-delay-value');
+        this.setMemorySmartMode = document.getElementById('set-memory-smart-mode');
+        this.setMemoryLimit = document.getElementById('set-memory-limit');
+        this.setMemoryLimitValue = document.getElementById('set-memory-limit-value');
+        this.setTagsEnabled = document.getElementById('set-tags-enabled');
+        this.setFocusMusic = document.getElementById('set-focus-music');
+        this.previewFocusMusicButton = document.getElementById('preview-focus-music');
+        
         // Toasts
         this.toastContainer = document.getElementById('toast-container');
         
@@ -119,6 +135,33 @@ class PopupManager {
         this.closeTagsButton.addEventListener('click', () => {
             this.closeTagsSection();
         });
+        
+        // Settings open/close
+        if (this.openSettingsButton) {
+            this.openSettingsButton.addEventListener('click', () => this.toggleSettingsSection(true));
+        }
+        if (this.openSettingsTopButton) {
+            this.openSettingsTopButton.addEventListener('click', () => this.toggleSettingsSection(true));
+        }
+        if (this.closeSettingsButton) {
+            this.closeSettingsButton.addEventListener('click', () => this.toggleSettingsSection(false));
+        }
+        if (this.setSuspendDelay) {
+            this.setSuspendDelay.addEventListener('input', () => {
+                this.setSuspendDelayValue.textContent = this.setSuspendDelay.value;
+            });
+        }
+        if (this.setMemoryLimit) {
+            this.setMemoryLimit.addEventListener('input', () => {
+                this.setMemoryLimitValue.textContent = this.setMemoryLimit.value;
+            });
+        }
+        if (this.saveSettingsButton) {
+            this.saveSettingsButton.addEventListener('click', () => this.saveInlineSettings());
+        }
+        if (this.previewFocusMusicButton) {
+            this.previewFocusMusicButton.addEventListener('click', () => this.previewFocusMusic());
+        }
         
         // Refresh data every 5 seconds
         setInterval(() => {
@@ -319,8 +362,17 @@ class PopupManager {
     }
     
     closeTagsSection() {
+        this.settingsSection.style.display = 'none';
         this.tagsSectionElement.style.display = 'none';
         this.toggleTagsButton.classList.remove('active');
+    }
+    
+    toggleSettingsSection(show) {
+        if (!this.settingsSection) return;
+        this.settingsSection.style.display = show ? 'block' : 'none';
+        if (show) {
+            this.loadInlineSettings();
+        }
     }
     
     async updateTagsDisplay() {
@@ -674,6 +726,105 @@ class PopupManager {
         }
     }
     
+    populateMusicOptions(tracks) {
+        if (!this.setFocusMusic) return;
+        this.setFocusMusic.innerHTML = '';
+        const add = (value, label) => {
+            const opt = document.createElement('option');
+            opt.value = value;
+            opt.textContent = label;
+            this.setFocusMusic.appendChild(opt);
+        };
+        add('none', 'None');
+        tracks.forEach(t => add(t.path, t.label));
+    }
+
+    async loadInlineSettings() {
+        try {
+            const response = await this.sendMessage({ action: 'getSettings' });
+            if (response.success) {
+                const s = response.data;
+                if (this.setAutoSuspend) this.setAutoSuspend.checked = s.autoSuspend;
+                if (this.setSuspendDelay) {
+                    this.setSuspendDelay.value = s.suspendDelay;
+                    this.setSuspendDelayValue.textContent = s.suspendDelay;
+                }
+                if (this.setMemorySmartMode) this.setMemorySmartMode.checked = s.memorySmartMode !== false;
+                if (this.setMemoryLimit) {
+                    this.setMemoryLimit.value = s.memoryLimit;
+                    this.setMemoryLimitValue.textContent = s.memoryLimit;
+                }
+                if (this.setTagsEnabled) this.setTagsEnabled.checked = s.tagsEnabled;
+
+                // Build music list (fallback to known tracks, try optional tracks.json)
+                const defaultTracks = [
+                    { path: 'assets/music/FocusFlow.mp3', label: 'FocusFlow 1' },
+                    { path: 'assets/music/FocusFlow_2.mp3', label: 'FocusFlow 2' },
+                    { path: 'assets/music/FocusFlow_3.mp3', label: 'FocusFlow 3' }
+                ];
+                try {
+                    const resp = await fetch(chrome.runtime.getURL('assets/music/tracks.json'));
+                    if (resp.ok) {
+                        const extra = await resp.json();
+                        if (Array.isArray(extra)) {
+                            // Expect array of {path, label}
+                            extra.forEach(item => {
+                                if (item && item.path && item.label && !defaultTracks.find(d => d.path === item.path)) {
+                                    defaultTracks.push(item);
+                                }
+                            });
+                        }
+                    }
+                } catch (_) { /* no tracks.json, ignore */ }
+                this.populateMusicOptions(defaultTracks);
+                if (this.setFocusMusic) this.setFocusMusic.value = s.focusModeMusic || 'none';
+            }
+        } catch (e) {
+            console.error('Failed to load inline settings:', e);
+            this.showToast('Failed to load settings', 'error');
+        }
+    }
+
+    async previewFocusMusic() {
+        try {
+            const track = this.setFocusMusic ? this.setFocusMusic.value : 'none';
+            const response = await this.sendMessage({ action: 'previewFocusMusic', track, durationMs: 15000 });
+            if (response.success) {
+                if (track === 'none') {
+                    this.showToast('Stopped preview', 'info');
+                } else {
+                    this.showToast('Playing preview...', 'success');
+                }
+            }
+        } catch (e) {
+            console.error('Failed to preview music:', e);
+            this.showToast('Failed to preview', 'error');
+        }
+    }
+
+    async saveInlineSettings() {
+        try {
+            const newSettings = {};
+            if (this.setAutoSuspend) newSettings.autoSuspend = this.setAutoSuspend.checked;
+            if (this.setSuspendDelay) newSettings.suspendDelay = parseInt(this.setSuspendDelay.value);
+            if (this.setMemorySmartMode) newSettings.memorySmartMode = this.setMemorySmartMode.checked;
+            if (this.setMemoryLimit) newSettings.memoryLimit = parseInt(this.setMemoryLimit.value);
+            if (this.setTagsEnabled) newSettings.tagsEnabled = this.setTagsEnabled.checked;
+            if (this.setFocusMusic) newSettings.focusModeMusic = this.setFocusMusic.value;
+            
+            const response = await this.sendMessage({ action: 'updateSettings', settings: newSettings });
+            if (response.success) {
+                this.showToast('Settings saved', 'success');
+                this.toggleSettingsSection(false);
+            } else {
+                throw new Error(response.error || 'Unknown error');
+            }
+        } catch (e) {
+            console.error('Failed to save inline settings:', e);
+            this.showToast('Failed to save settings', 'error');
+        }
+    }
+
     async analyzeExtensions() {
         try {
             this.analyzeExtensionsButton.disabled = true;
