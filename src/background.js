@@ -5,13 +5,13 @@ class FastBrowse {
     constructor() {
         this.settings = {
             autoSuspend: true,
-            suspendDelay: 30, // minutes
+            suspendDelay: 1, // minutes - start with 1 minute for testing
             memoryThreshold: true,
             memoryLimit: 80, // percentage
             protectPinned: true,
             protectAudio: true,
             protectForms: true,
-            showNotifications: false,
+            showNotifications: true, // Enable notifications by default for debugging
             memoryWarnings: true
         };
         
@@ -149,13 +149,27 @@ class FastBrowse {
     async suspendTab(tabId) {
         try {
             const tab = await chrome.tabs.get(tabId);
+            console.log(`Attempting to suspend tab ${tabId}: ${tab.title}`);
             
             // Check if tab should be protected
             if (await this.shouldProtectTab(tab)) {
+                console.log(`Tab ${tabId} is protected from suspension`);
                 return;
             }
             
-            // Store tab information
+            // Check if tab is already discarded
+            if (tab.discarded) {
+                console.log(`Tab ${tabId} is already discarded`);
+                this.suspendedTabs.set(tabId, {
+                    url: tab.url,
+                    title: tab.title,
+                    favIconUrl: tab.favIconUrl,
+                    suspendedAt: Date.now()
+                });
+                return;
+            }
+            
+            // Store tab information before discarding
             this.suspendedTabs.set(tabId, {
                 url: tab.url,
                 title: tab.title,
@@ -164,16 +178,105 @@ class FastBrowse {
             });
             
             // Discard the tab
-            await chrome.tabs.discard(tabId);
+            console.log(`Discarding tab ${tabId}...`);
             
-            if (this.settings.showNotifications) {
-                this.showNotification(`Tab suspended: ${tab.title}`);
+            try {
+                await chrome.tabs.discard(tabId);
+                
+                // Verify the tab was discarded
+                const updatedTab = await chrome.tabs.get(tabId);
+                if (updatedTab.discarded) {
+                    console.log(`✓ Tab ${tabId} successfully suspended: ${tab.title}`);
+                    if (this.settings.showNotifications) {
+                        this.showNotification(`Tab suspended: ${tab.title}`);
+                    }
+                } else {
+                    console.warn(`⚠ Tab ${tabId} was not discarded by Chrome API, trying alternative method`);
+                    // Alternative: Replace tab URL with a suspended page
+                    await this.suspendTabAlternative(tabId, tab);
+                }
+            } catch (discardError) {
+                console.error(`Discard API failed for tab ${tabId}:`, discardError);
+                // Fallback to alternative suspension method
+                await this.suspendTabAlternative(tabId, tab);
             }
             
-            console.log(`Tab ${tabId} suspended: ${tab.title}`);
         } catch (error) {
             console.error(`Failed to suspend tab ${tabId}:`, error);
             this.suspendedTabs.delete(tabId);
+            
+            // If tab doesn't exist anymore, that's ok
+            if (error.message && error.message.includes('No tab with id')) {
+                console.log(`Tab ${tabId} no longer exists`);
+                return;
+            }
+        }
+    }
+    
+    async suspendTabAlternative(tabId, originalTab) {
+        try {
+            // Create a data URL with suspend page content
+            const suspendPageHTML = `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="utf-8">
+                    <title>Suspended: ${originalTab.title}</title>
+                    <style>
+                        body { 
+                            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                            background: #f5f5f5; 
+                            padding: 40px; 
+                            text-align: center; 
+                            color: #666;
+                        }
+                        .container {
+                            max-width: 400px;
+                            margin: 0 auto;
+                            background: white;
+                            padding: 40px;
+                            border-radius: 8px;
+                            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                        }
+                        .icon { font-size: 48px; margin-bottom: 20px; }
+                        h1 { color: #333; font-size: 20px; margin-bottom: 10px; }
+                        .url { font-size: 12px; color: #999; word-break: break-all; margin-bottom: 20px; }
+                        button {
+                            background: #2196F3;
+                            color: white;
+                            border: none;
+                            padding: 12px 24px;
+                            border-radius: 6px;
+                            cursor: pointer;
+                            font-size: 14px;
+                        }
+                        button:hover { background: #1976D2; }
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <div class="icon">😴</div>
+                        <h1>Tab Suspended</h1>
+                        <p>This tab was suspended by FastBrowse to save memory.</p>
+                        <div class="url">${originalTab.url}</div>
+                        <button onclick="window.location.href='${originalTab.url}'">Restore Tab</button>
+                    </div>
+                </body>
+                </html>
+            `;
+            
+            const dataURL = 'data:text/html;charset=utf-8,' + encodeURIComponent(suspendPageHTML);
+            
+            // Navigate tab to suspend page
+            await chrome.tabs.update(tabId, { url: dataURL });
+            
+            console.log(`✓ Tab ${tabId} suspended using alternative method`);
+            if (this.settings.showNotifications) {
+                this.showNotification(`Tab suspended (alt): ${originalTab.title}`);
+            }
+            
+        } catch (error) {
+            console.error(`Alternative suspend method failed for tab ${tabId}:`, error);
         }
     }
     
@@ -304,11 +407,24 @@ class FastBrowse {
     }
     
     async handleMessage(request, sender, sendResponse) {
+        console.log('FastBrowse received message:', request.action);
         try {
             switch (request.action) {
                 case 'getMemoryInfo':
-                    const memoryInfo = await chrome.system.memory.getInfo();
-                    sendResponse({ success: true, data: memoryInfo });
+                    try {
+                        const memoryInfo = await chrome.system.memory.getInfo();
+                        sendResponse({ success: true, data: memoryInfo });
+                    } catch (error) {
+                        console.warn('Memory API not available:', error);
+                        // Fallback for systems where memory API isn't available
+                        sendResponse({ 
+                            success: true, 
+                            data: { 
+                                capacity: 8000000000, // 8GB fallback
+                                availableCapacity: 4000000000 // 4GB available fallback
+                            }
+                        });
+                    }
                     break;
                     
                 case 'getAllTabs':
@@ -317,30 +433,56 @@ class FastBrowse {
                         ...tab,
                         suspended: this.suspendedTabs.has(tab.id)
                     }));
+                    console.log(`Found ${tabs.length} tabs, ${this.suspendedTabs.size} suspended`);
                     sendResponse({ success: true, data: tabsWithSuspendState });
                     break;
                     
                 case 'suspendAllTabs':
+                    console.log('Suspending all tabs...');
                     await this.suspendAllTabs();
                     sendResponse({ success: true });
                     break;
                     
                 case 'restoreAllTabs':
+                    console.log('Restoring all tabs...');
                     await this.restoreAllTabs();
                     sendResponse({ success: true });
                     break;
                     
                 case 'suspendTab':
+                    console.log(`Manual suspend request for tab ${request.tabId}`);
                     await this.suspendTab(request.tabId);
                     sendResponse({ success: true });
                     break;
                     
                 case 'restoreTab':
+                    console.log(`Manual restore request for tab ${request.tabId}`);
                     await this.restoreTab(request.tabId);
                     sendResponse({ success: true });
                     break;
                     
+                case 'testSuspend':
+                    // Force suspend a random non-active tab for testing
+                    console.log('Test suspend triggered');
+                    const allTabs = await chrome.tabs.query({ active: false });
+                    const eligibleTabs = [];
+                    for (const tab of allTabs) {
+                        if (!(await this.shouldProtectTab(tab))) {
+                            eligibleTabs.push(tab);
+                        }
+                    }
+                    if (eligibleTabs.length > 0) {
+                        const testTab = eligibleTabs[0];
+                        console.log(`Test suspending tab: ${testTab.title}`);
+                        await this.suspendTab(testTab.id);
+                        sendResponse({ success: true, message: `Test suspended: ${testTab.title}` });
+                    } else {
+                        sendResponse({ success: false, message: 'No eligible tabs to suspend' });
+                    }
+                    break;
+                    
                 case 'updateSettings':
+                    console.log('Updating settings:', request.settings);
                     this.settings = { ...this.settings, ...request.settings };
                     await chrome.storage.sync.set(this.settings);
                     sendResponse({ success: true });
@@ -348,6 +490,17 @@ class FastBrowse {
                     
                 case 'getSettings':
                     sendResponse({ success: true, data: this.settings });
+                    break;
+                    
+                case 'getDebugInfo':
+                    sendResponse({ 
+                        success: true, 
+                        data: {
+                            suspendedTabs: Array.from(this.suspendedTabs.entries()),
+                            activeTimers: this.tabTimers.size,
+                            settings: this.settings
+                        }
+                    });
                     break;
                     
                 default:
