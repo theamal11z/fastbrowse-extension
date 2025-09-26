@@ -8,6 +8,11 @@ class PopupManager {
         this.suspendAllButton = document.getElementById('suspend-all');
         this.restoreAllButton = document.getElementById('restore-all');
         
+        // Extension monitoring elements
+        this.analyzeExtensionsButton = document.getElementById('analyze-extensions');
+        this.toggleExtensionsButton = document.getElementById('toggle-extensions');
+        this.extensionListElement = document.getElementById('extension-list');
+        
         this.init();
     }
     
@@ -24,6 +29,14 @@ class PopupManager {
         
         this.restoreAllButton.addEventListener('click', () => {
             this.restoreAllTabs();
+        });
+        
+        this.analyzeExtensionsButton.addEventListener('click', () => {
+            this.analyzeExtensions();
+        });
+        
+        this.toggleExtensionsButton.addEventListener('click', () => {
+            this.toggleExtensionList();
         });
         
         // Refresh data every 5 seconds
@@ -245,6 +258,149 @@ class PopupManager {
             window.close(); // Close popup
         } catch (error) {
             console.error('Failed to switch to tab:', error);
+        }
+    }
+    
+    async analyzeExtensions() {
+        try {
+            this.analyzeExtensionsButton.disabled = true;
+            this.analyzeExtensionsButton.textContent = 'Analyzing...';
+            
+            const response = await this.sendMessage({ action: 'getExtensionSuggestions' });
+            if (response.success) {
+                this.renderExtensionSuggestions(response.data);
+                this.extensionListElement.style.display = 'block';
+                this.toggleExtensionsButton.textContent = 'Hide';
+            }
+        } catch (error) {
+            console.error('Failed to analyze extensions:', error);
+        } finally {
+            this.analyzeExtensionsButton.disabled = false;
+            this.analyzeExtensionsButton.textContent = 'Analyze Extensions';
+        }
+    }
+    
+    toggleExtensionList() {
+        const isVisible = this.extensionListElement.style.display !== 'none';
+        this.extensionListElement.style.display = isVisible ? 'none' : 'block';
+        this.toggleExtensionsButton.textContent = isVisible ? 'Show' : 'Hide';
+    }
+    
+    renderExtensionSuggestions(suggestions) {
+        this.extensionListElement.innerHTML = '';
+        
+        if (suggestions.length === 0) {
+            const noSuggestions = document.createElement('div');
+            noSuggestions.textContent = 'No optimization suggestions found. Your extensions look good!';
+            noSuggestions.style.cssText = 'padding: 12px; text-align: center; color: #4caf50; font-size: 12px;';
+            this.extensionListElement.appendChild(noSuggestions);
+            return;
+        }
+        
+        suggestions.forEach(suggestion => {
+            const extensionItem = this.createExtensionItem(suggestion);
+            this.extensionListElement.appendChild(extensionItem);
+        });
+    }
+    
+    createExtensionItem(suggestion) {
+        const extensionItem = document.createElement('div');
+        extensionItem.className = `extension-item ${suggestion.severity}-memory`;
+        
+        if (suggestion.action === 'urgent_disable') {
+            extensionItem.classList.add('suggestion');
+        }
+        
+        const extensionInfo = document.createElement('div');
+        extensionInfo.className = 'extension-info';
+        
+        const extensionName = document.createElement('div');
+        extensionName.className = 'extension-name';
+        extensionName.textContent = suggestion.extensionName;
+        
+        const extensionMemory = document.createElement('div');
+        extensionMemory.className = 'extension-memory';
+        extensionMemory.textContent = `~${suggestion.memoryUsage}MB estimated`;
+        
+        const extensionReason = document.createElement('div');
+        extensionReason.className = 'extension-reason';
+        extensionReason.textContent = suggestion.reason;
+        
+        extensionInfo.appendChild(extensionName);
+        extensionInfo.appendChild(extensionMemory);
+        extensionInfo.appendChild(extensionReason);
+        
+        const extensionActions = document.createElement('div');
+        extensionActions.className = 'extension-actions';
+        
+        if (suggestion.canDisable) {
+            const disableButton = document.createElement('button');
+            disableButton.textContent = 'Disable';
+            disableButton.className = 'disable-btn';
+            disableButton.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                await this.disableExtension(suggestion.extensionId, suggestion.extensionName);
+                // Refresh the analysis after disabling
+                setTimeout(() => this.analyzeExtensions(), 1000);
+            });
+            extensionActions.appendChild(disableButton);
+        }
+        
+        // Add severity indicator
+        const severityIndicator = document.createElement('span');
+        severityIndicator.style.cssText = 'font-size: 10px; padding: 2px 4px; border-radius: 2px; margin-left: 4px;';
+        
+        switch (suggestion.severity) {
+            case 'high':
+                severityIndicator.textContent = 'HIGH';
+                severityIndicator.style.backgroundColor = '#f44336';
+                severityIndicator.style.color = 'white';
+                break;
+            case 'medium':
+                severityIndicator.textContent = 'MED';
+                severityIndicator.style.backgroundColor = '#ff9800';
+                severityIndicator.style.color = 'white';
+                break;
+            case 'low':
+                severityIndicator.textContent = 'LOW';
+                severityIndicator.style.backgroundColor = '#2196F3';
+                severityIndicator.style.color = 'white';
+                break;
+        }
+        
+        extensionActions.appendChild(severityIndicator);
+        
+        extensionItem.appendChild(extensionInfo);
+        extensionItem.appendChild(extensionActions);
+        
+        return extensionItem;
+    }
+    
+    async disableExtension(extensionId, extensionName) {
+        try {
+            const confirmed = confirm(`Are you sure you want to disable "${extensionName}"?\n\nThis will disable the extension to free up memory. You can re-enable it later from Chrome's extension settings.`);
+            
+            if (!confirmed) return;
+            
+            const response = await this.sendMessage({ 
+                action: 'disableExtension', 
+                extensionId: extensionId 
+            });
+            
+            if (response.success) {
+                // Show success message
+                const notification = document.createElement('div');
+                notification.textContent = `Extension "${extensionName}" disabled successfully`;
+                notification.style.cssText = 'position: fixed; top: 10px; right: 10px; background: #4caf50; color: white; padding: 8px 12px; border-radius: 4px; font-size: 12px; z-index: 1000;';
+                document.body.appendChild(notification);
+                
+                setTimeout(() => {
+                    document.body.removeChild(notification);
+                }, 3000);
+            }
+        } catch (error) {
+            console.error('Failed to disable extension:', error);
+            alert(`Failed to disable extension: ${error.message}`);
         }
     }
     

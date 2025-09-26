@@ -57,3 +57,8 @@ coverage/
 
 # Prettier cache
 .prettiercache
+
+hb.html
+hb.js
+WARP.md
+CHANGELOG.md

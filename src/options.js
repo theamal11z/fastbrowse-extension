@@ -15,6 +15,12 @@ class OptionsManager {
             protectForms: document.getElementById('protect-forms'),
             showNotifications: document.getElementById('show-notifications'),
             memoryWarnings: document.getElementById('memory-warnings'),
+            // Extension monitoring elements
+            extensionMonitoring: document.getElementById('extension-monitoring'),
+            extensionMemoryThreshold: document.getElementById('extension-memory-threshold'),
+            extensionMemoryThresholdValue: document.getElementById('extension-memory-threshold-value'),
+            extensionSuggestions: document.getElementById('extension-suggestions'),
+            extensionNotifications: document.getElementById('extension-notifications'),
             saveButton: document.getElementById('save'),
             saveStatus: document.getElementById('save-status')
         };
@@ -35,6 +41,10 @@ class OptionsManager {
         
         this.elements.memoryLimit.addEventListener('input', () => {
             this.elements.memoryLimitValue.textContent = this.elements.memoryLimit.value;
+        });
+        
+        this.elements.extensionMemoryThreshold.addEventListener('input', () => {
+            this.elements.extensionMemoryThresholdValue.textContent = this.elements.extensionMemoryThreshold.value;
         });
         
         // Save button
@@ -59,6 +69,10 @@ class OptionsManager {
         this.elements.memoryLimit.addEventListener('change', () => {
             this.saveSettings();
         });
+        
+        this.elements.extensionMemoryThreshold.addEventListener('change', () => {
+            this.saveSettings();
+        });
     }
     
     async loadSettings() {
@@ -80,6 +94,13 @@ class OptionsManager {
                 this.elements.showNotifications.checked = settings.showNotifications;
                 this.elements.memoryWarnings.checked = settings.memoryWarnings;
                 
+                // Extension monitoring settings
+                this.elements.extensionMonitoring.checked = settings.extensionMonitoring;
+                this.elements.extensionMemoryThreshold.value = settings.extensionMemoryThreshold;
+                this.elements.extensionMemoryThresholdValue.textContent = settings.extensionMemoryThreshold;
+                this.elements.extensionSuggestions.checked = settings.extensionSuggestions;
+                this.elements.extensionNotifications.checked = settings.extensionNotifications;
+                
                 console.log('Settings loaded successfully');
             }
         } catch (error) {
@@ -99,7 +120,12 @@ class OptionsManager {
                 protectAudio: this.elements.protectAudio.checked,
                 protectForms: this.elements.protectForms.checked,
                 showNotifications: this.elements.showNotifications.checked,
-                memoryWarnings: this.elements.memoryWarnings.checked
+                memoryWarnings: this.elements.memoryWarnings.checked,
+                // Extension monitoring settings
+                extensionMonitoring: this.elements.extensionMonitoring.checked,
+                extensionMemoryThreshold: parseInt(this.elements.extensionMemoryThreshold.value),
+                extensionSuggestions: this.elements.extensionSuggestions.checked,
+                extensionNotifications: this.elements.extensionNotifications.checked
             };
             
             const response = await this.sendMessage({ 

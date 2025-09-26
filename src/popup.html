@@ -117,6 +117,91 @@
             font-size: 11px;
             margin: 0 2px;
         }
+        
+        .extension-section {
+            margin-top: 16px;
+            border-top: 1px solid #e0e0e0;
+            padding-top: 12px;
+        }
+        
+        .extension-section h3 {
+            margin: 0 0 8px 0;
+            font-size: 14px;
+            color: #333;
+        }
+        
+        .extension-controls {
+            margin-bottom: 8px;
+        }
+        
+        .extension-list {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        .extension-item {
+            display: flex;
+            align-items: center;
+            padding: 6px 8px;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            margin-bottom: 4px;
+            font-size: 12px;
+            background: white;
+        }
+        
+        .extension-item.high-memory {
+            border-color: #f44336;
+            background: #fff5f5;
+        }
+        
+        .extension-item.medium-memory {
+            border-color: #ff9800;
+            background: #fff8f0;
+        }
+        
+        .extension-item.suggestion {
+            border-color: #2196F3;
+            background: #f0f8ff;
+        }
+        
+        .extension-info {
+            flex: 1;
+        }
+        
+        .extension-name {
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .extension-memory {
+            font-size: 11px;
+            color: #666;
+        }
+        
+        .extension-reason {
+            font-size: 11px;
+            color: #666;
+            margin-top: 2px;
+        }
+        
+        .extension-actions {
+            margin-left: 8px;
+        }
+        
+        .extension-actions button {
+            padding: 3px 6px;
+            font-size: 10px;
+            margin: 0 1px;
+        }
+        
+        .disable-btn {
+            background: #f44336 !important;
+        }
+        
+        .disable-btn:hover {
+            background: #d32f2f !important;
+        }
     </style>
 </head>
 <body>
@@ -138,6 +223,17 @@
     
     <div class="tab-list" id="tab-list">
         <!-- Tab items will be populated here -->
+    </div>
+    
+    <div class="extension-section">
+        <h3>Extension Memory Analysis</h3>
+        <div class="extension-controls">
+            <button id="analyze-extensions" class="secondary">Analyze Extensions</button>
+            <button id="toggle-extensions" class="secondary">Show/Hide</button>
+        </div>
+        <div class="extension-list" id="extension-list" style="display: none;">
+            <!-- Extension items will be populated here -->
+        </div>
     </div>
     
     <script src="popup.js"></script>

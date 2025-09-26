@@ -46,6 +46,14 @@ After suspending tabs, check in Chrome Task Manager (`Shift+Esc`):
 
 ## Common Issues & Solutions
 
+### Issue: "No tab with id: XXXXXX" errors
+- **Cause**: User closes tabs while suspension timers are still running
+- **Fixed**: v1.0.1 - Added comprehensive error handling for closed tabs
+- **Verification**: 
+  - Open several tabs, start timers, then quickly close some tabs
+  - Check background console - should see "Tab XXXX no longer exists (closed by user)"
+  - No error messages should appear
+
 ### Issue: "No tabs to suspend"
 - **Cause**: All tabs are either active or protected (pinned, playing audio)
 - **Solution**: Open more tabs, ensure some are inactive and not pinned
@@ -81,6 +89,30 @@ After suspending tabs, check in Chrome Task Manager (`Shift+Esc`):
    - Switch to one tab and wait 1-2 minutes
    - Other tabs should automatically suspend
    - Check background console for timer logs
+
+## Race Condition Testing
+
+### Test Tab Closure During Timer
+1. **Setup**: Set suspension delay to 1 minute
+2. **Actions**:
+   - Open 5-6 tabs
+   - Switch to one tab (starts timers for others)
+   - Immediately close 2-3 of the other tabs
+   - Wait 1-2 minutes
+3. **Expected Result**:
+   - Background console shows "Tab XXXX no longer exists (closed by user)"
+   - No error messages about missing tabs
+   - Remaining tabs suspend normally
+
+### Test Tab Closure During Suspension
+1. **Setup**: Use manual "Suspend All Tabs" button
+2. **Actions**:
+   - Open several tabs
+   - Click "Suspend All Tabs"
+   - Quickly close tabs while suspension is in progress
+3. **Expected Result**:
+   - No "No tab with id" errors
+   - Extension handles closed tabs gracefully
 
 ## Debug Commands
 

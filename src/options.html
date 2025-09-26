@@ -149,6 +149,35 @@
         </label>
     </div>
     
+    <div class="section">
+        <h2>Extension Monitoring</h2>
+        
+        <label>
+            <input type="checkbox" id="extension-monitoring"> 
+            Monitor extension memory usage
+        </label>
+        <div class="description">Analyze installed extensions and identify memory-heavy ones</div>
+        
+        <label>Extension memory threshold (MB):</label>
+        <div class="range-container">
+            <input type="range" id="extension-memory-threshold" min="20" max="200" value="50">
+            <span class="range-value" id="extension-memory-threshold-value">50</span>
+        </div>
+        <div class="description">Extensions using more than this amount will be flagged for optimization</div>
+        
+        <label>
+            <input type="checkbox" id="extension-suggestions"> 
+            Enable smart extension suggestions
+        </label>
+        <div class="description">Automatically detect duplicate functionality and optimization opportunities</div>
+        
+        <label>
+            <input type="checkbox" id="extension-notifications"> 
+            Show extension optimization notifications
+        </label>
+        <div class="description">Get notified about high-memory extensions and optimization suggestions</div>
+    </div>
+    
     <button id="save">Save Settings</button>
     <span class="save-status" id="save-status"></span>
     
