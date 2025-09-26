@@ -17,7 +17,15 @@ class FastBrowse {
             extensionMonitoring: true,
             extensionMemoryThreshold: 50, // MB
             extensionSuggestions: true,
-            extensionNotifications: true
+            extensionNotifications: true,
+            // Focus mode settings
+            focusMode: false,
+            focusAutoSuspend: true, // Auto-suspend tabs in focus mode
+            focusMinimalTheme: true,
+            focusRemoveDistractions: true,
+            focusDisableAnimations: true,
+            focusMemoryOptimization: true,
+            focusExtensionRecommendations: true
         };
         
         this.suspendedTabs = new Map();
@@ -27,6 +35,67 @@ class FastBrowse {
         this.extensionMemoryData = new Map();
         this.extensionSuggestions = new Map();
         this.lastExtensionCheck = 0;
+        
+        // Focus mode state
+        this.focusModeActive = false;
+        this.focusModeStartTime = null;
+        this.focusModeStats = {
+            tabsSuspended: 0,
+            distractionsRemoved: 0,
+            timeActive: 0
+        };
+        
+        // Recommended focus extensions database
+        this.recommendedFocusExtensions = new Map([
+            ['ublock-origin', {
+                name: 'uBlock Origin',
+                id: 'cjpalhdlnbpafiamejdnhcphjbkeiagm',
+                webstoreUrl: 'https://chrome.google.com/webstore/detail/ublock-origin/cjpalhdlnbpafiamejdnhcphjbkeiagm',
+                description: 'Advanced ad and tracker blocker',
+                priority: 10,
+                category: 'blocking'
+            }],
+            ['df-youtube', {
+                name: 'DF YouTube (Distraction Free)',
+                id: 'mjdepdfccjgcndkmemponafgioodelna',
+                webstoreUrl: 'https://chrome.google.com/webstore/detail/df-youtube-distraction-fr/mjdepdfccjgcndkmemponafgioodelna',
+                description: 'Removes YouTube distractions like suggestions and comments',
+                priority: 9,
+                category: 'social-media'
+            }],
+            ['news-feed-eradicator', {
+                name: 'News Feed Eradicator',
+                id: 'fjcldmjmjhkklehbacihaiopjklihlgg',
+                webstoreUrl: 'https://chrome.google.com/webstore/detail/news-feed-eradicator/fjcldmjmjhkklehbacihaiopjklihlgg',
+                description: 'Removes distracting news feeds from Facebook, Twitter, etc.',
+                priority: 8,
+                category: 'social-media'
+            }],
+            ['stayfocusd', {
+                name: 'StayFocusd',
+                id: 'laankejkbhbdhmipfmgcngdelahlfoji',
+                webstoreUrl: 'https://chrome.google.com/webstore/detail/stayfocusd/laankejkbhbdhmipfmgcngdelahlfoji',
+                description: 'Limits time spent on time-wasting websites',
+                priority: 7,
+                category: 'time-management'
+            }],
+            ['forest', {
+                name: 'Forest: Stay Focused',
+                id: 'kjacjjdnoddnpbbcjilcajfhhbdhkpgk',
+                webstoreUrl: 'https://chrome.google.com/webstore/detail/forest-stay-focused-be-pr/kjacjjdnoddnpbbcjilcajfhhbdhkpgk',
+                description: 'Pomodoro timer and website blocker',
+                priority: 6,
+                category: 'time-management'
+            }],
+            ['momentum', {
+                name: 'Momentum',
+                id: 'laookkfknpbbblfpciffpaejjkokdgca',
+                webstoreUrl: 'https://chrome.google.com/webstore/detail/momentum/laookkfknpbbblfpciffpaejjkokdgca',
+                description: 'Replaces new tab with inspiring dashboard',
+                priority: 5,
+                category: 'productivity'
+            }]
+        ]);
         
         this.init();
     }
@@ -496,13 +565,34 @@ class FastBrowse {
         }
     }
     
-    showNotification(message) {
-        chrome.notifications.create({
-            type: 'basic',
-            iconUrl: 'assets/icon48.png',
-            title: 'FastBrowse',
-            message: message
-        });
+    showNotification(message, options = {}) {
+        try {
+            const notificationOptions = {
+                type: 'basic',
+                iconUrl: chrome.runtime.getURL('assets/icon48.png'),
+                title: 'FastBrowse',
+                message: message,
+                ...options
+            };
+            
+            // Remove iconUrl from buttons if present, as it causes issues
+            if (notificationOptions.buttons) {
+                notificationOptions.buttons = notificationOptions.buttons.map(button => {
+                    const { iconUrl, ...cleanButton } = button;
+                    return cleanButton;
+                });
+            }
+            
+            chrome.notifications.create(notificationOptions, (notificationId) => {
+                if (chrome.runtime.lastError) {
+                    console.debug('Notification error:', chrome.runtime.lastError);
+                } else {
+                    console.log('Notification created:', notificationId);
+                }
+            });
+        } catch (error) {
+            console.debug('Failed to show notification:', error);
+        }
     }
     
     // Helper method for safe tab debugging
@@ -723,6 +813,207 @@ class FastBrowse {
         }
     }
     
+    // Focus Mode Implementation
+    async enableFocusMode() {
+        try {
+            this.focusModeActive = true;
+            this.focusModeStartTime = Date.now();
+            this.settings.focusMode = true;
+            
+            // Save focus mode state
+            await chrome.storage.sync.set({ focusMode: true });
+            
+            console.log('Focus mode enabled');
+            
+            // Inject focus mode into all existing tabs
+            await this.injectFocusModeIntoAllTabs();
+            
+            // Auto-suspend tabs if enabled
+            if (this.settings.focusAutoSuspend) {
+                await this.focusAutoSuspendTabs();
+            }
+            
+            // Show notification
+            if (this.settings.showNotifications) {
+                this.showNotification('🎯 Focus Mode Enabled - Distractions removed');
+            }
+            
+            // Check for recommended extensions
+            if (this.settings.focusExtensionRecommendations) {
+                setTimeout(() => this.checkMissingFocusExtensions(), 2000);
+            }
+            
+        } catch (error) {
+            console.error('Failed to enable focus mode:', error);
+            this.focusModeActive = false;
+            this.settings.focusMode = false;
+            throw error;
+        }
+    }
+    
+    async disableFocusMode() {
+        try {
+            this.focusModeActive = false;
+            this.settings.focusMode = false;
+            
+            // Update stats
+            if (this.focusModeStartTime) {
+                this.focusModeStats.timeActive += Date.now() - this.focusModeStartTime;
+                this.focusModeStartTime = null;
+            }
+            
+            // Save focus mode state
+            await chrome.storage.sync.set({ focusMode: false });
+            
+            console.log('Focus mode disabled');
+            
+            // Remove focus mode from all existing tabs
+            await this.removeFocusModeFromAllTabs();
+            
+            // Show notification
+            if (this.settings.showNotifications) {
+                const timeActiveMinutes = Math.round(this.focusModeStats.timeActive / 60000);
+                this.showNotification(`✨ Focus Mode Disabled - Active for ${timeActiveMinutes} minutes`);
+            }
+            
+        } catch (error) {
+            console.error('Failed to disable focus mode:', error);
+            throw error;
+        }
+    }
+    
+    async injectFocusModeIntoAllTabs() {
+        try {
+            const tabs = await chrome.tabs.query({});
+            
+            for (const tab of tabs) {
+                // Skip chrome:// and extension pages
+                if (tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://')) {
+                    continue;
+                }
+                
+                try {
+                    // Send message to content script
+                    await chrome.tabs.sendMessage(tab.id, { action: 'enableFocusMode' });
+                } catch (error) {
+                    // Content script might not be loaded yet, that's OK
+                    console.debug(`Could not enable focus mode in tab ${tab.id}:`, error.message);
+                }
+            }
+        } catch (error) {
+            console.error('Failed to inject focus mode into tabs:', error);
+        }
+    }
+    
+    async removeFocusModeFromAllTabs() {
+        try {
+            const tabs = await chrome.tabs.query({});
+            
+            for (const tab of tabs) {
+                if (tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://')) {
+                    continue;
+                }
+                
+                try {
+                    await chrome.tabs.sendMessage(tab.id, { action: 'disableFocusMode' });
+                } catch (error) {
+                    console.debug(`Could not disable focus mode in tab ${tab.id}:`, error.message);
+                }
+            }
+        } catch (error) {
+            console.error('Failed to remove focus mode from tabs:', error);
+        }
+    }
+    
+    async focusAutoSuspendTabs() {
+        try {
+            const tabs = await chrome.tabs.query({ active: false });
+            let suspendCount = 0;
+            
+            for (const tab of tabs) {
+                // Don't suspend tabs that are already suspended
+                if (this.suspendedTabs.has(tab.id)) {
+                    continue;
+                }
+                
+                // Apply same protection logic as regular suspension
+                if (await this.shouldProtectTab(tab)) {
+                    continue;
+                }
+                
+                await this.suspendTab(tab.id);
+                suspendCount++;
+            }
+            
+            this.focusModeStats.tabsSuspended += suspendCount;
+            console.log(`Focus mode: Auto-suspended ${suspendCount} tabs`);
+            
+        } catch (error) {
+            console.error('Failed to auto-suspend tabs in focus mode:', error);
+        }
+    }
+    
+    async getFocusExtensionRecommendations() {
+        try {
+            const installedExtensions = await chrome.management.getAll();
+            const installedIds = new Set(installedExtensions
+                .filter(ext => ext.enabled)
+                .map(ext => ext.id)
+            );
+            
+            const recommendations = [];
+            
+            for (const [key, extension] of this.recommendedFocusExtensions) {
+                if (!installedIds.has(extension.id)) {
+                    recommendations.push({
+                        key,
+                        ...extension,
+                        installed: false,
+                        enabled: false
+                    });
+                } else {
+                    const installedExt = installedExtensions.find(e => e.id === extension.id);
+                    recommendations.push({
+                        key,
+                        ...extension,
+                        installed: true,
+                        enabled: installedExt?.enabled || false
+                    });
+                }
+            }
+            
+            return recommendations.sort((a, b) => b.priority - a.priority);
+            
+        } catch (error) {
+            console.error('Failed to get focus extension recommendations:', error);
+            return [];
+        }
+    }
+    
+    async checkMissingFocusExtensions() {
+        try {
+            const recommendations = await this.getFocusExtensionRecommendations();
+            const missing = recommendations.filter(ext => !ext.installed && ext.priority >= 8);
+            
+            if (missing.length > 0 && this.settings.showNotifications) {
+                const topMissing = missing[0];
+                this.showNotification(
+                    `💡 Focus Tip: Install ${topMissing.name} for better distraction blocking`,
+                    {
+                        buttons: [{
+                            title: 'Install'
+                        }],
+                        eventTime: Date.now() + 5000,
+                        requireInteraction: true
+                    }
+                );
+            }
+            
+        } catch (error) {
+            console.error('Failed to check missing focus extensions:', error);
+        }
+    }
+    
     async handleMessage(request, sender, sendResponse) {
         console.log('FastBrowse received message:', request.action);
         try {
@@ -845,6 +1136,50 @@ class FastBrowse {
                         sendResponse({ success: true });
                     } catch (error) {
                         console.error('Failed to enable extension:', error);
+                        sendResponse({ success: false, error: error.message });
+                    }
+                    break;
+                    
+                case 'enableFocusMode':
+                    console.log('Enabling focus mode');
+                    await this.enableFocusMode();
+                    sendResponse({ success: true, focusMode: true });
+                    break;
+                    
+                case 'disableFocusMode':
+                    console.log('Disabling focus mode');
+                    await this.disableFocusMode();
+                    sendResponse({ success: true, focusMode: false });
+                    break;
+                    
+                case 'toggleFocusMode':
+                    const newState = !this.focusModeActive;
+                    console.log(`Toggling focus mode to: ${newState}`);
+                    if (newState) {
+                        await this.enableFocusMode();
+                    } else {
+                        await this.disableFocusMode();
+                    }
+                    sendResponse({ success: true, focusMode: this.focusModeActive });
+                    break;
+                    
+                case 'getFocusState':
+                    sendResponse({ 
+                        success: true, 
+                        data: {
+                            focusMode: this.focusModeActive,
+                            stats: this.focusModeStats,
+                            startTime: this.focusModeStartTime
+                        }
+                    });
+                    break;
+                    
+                case 'getFocusExtensionRecommendations':
+                    try {
+                        const recommendations = await this.getFocusExtensionRecommendations();
+                        sendResponse({ success: true, data: recommendations });
+                    } catch (error) {
+                        console.error('Failed to get focus extension recommendations:', error);
                         sendResponse({ success: false, error: error.message });
                     }
                     break;

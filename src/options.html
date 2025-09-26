@@ -178,6 +178,66 @@
         <div class="description">Get notified about high-memory extensions and optimization suggestions</div>
     </div>
     
+    <div class="section">
+        <h2>🎯 Focus Mode</h2>
+        
+        <label>
+            <input type="checkbox" id="focus-mode"> 
+            Enable Focus Mode on startup
+        </label>
+        <div class="description">Focus Mode removes distractions, applies minimal theming, and optimizes for productivity</div>
+        
+        <label>
+            <input type="checkbox" id="focus-auto-suspend"> 
+            Auto-suspend tabs when entering Focus Mode
+        </label>
+        <div class="description">Automatically suspend all background tabs when Focus Mode is activated</div>
+        
+        <label>
+            <input type="checkbox" id="focus-minimal-theme"> 
+            Apply minimal dark theme
+        </label>
+        <div class="description">Use a clean, distraction-free dark theme optimized for focus</div>
+        
+        <label>
+            <input type="checkbox" id="focus-remove-distractions"> 
+            Remove website distractions
+        </label>
+        <div class="description">Hide sidebars, suggestions, comments, and other distracting elements on websites</div>
+        
+        <label>
+            <input type="checkbox" id="focus-disable-animations"> 
+            Disable animations and transitions
+        </label>
+        <div class="description">Turn off animations to reduce visual distractions and improve performance</div>
+        
+        <label>
+            <input type="checkbox" id="focus-memory-optimization"> 
+            Enable memory optimization techniques
+        </label>
+        <div class="description">Use advanced techniques like image compression and lazy loading to reduce memory usage</div>
+        
+        <label>
+            <input type="checkbox" id="focus-extension-recommendations"> 
+            Show recommended focus extensions
+        </label>
+        <div class="description">Get suggestions for extensions that complement Focus Mode (uBlock Origin, DF YouTube, etc.)</div>
+        
+        <div class="focus-stats" style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 6px; border-left: 4px solid #667eea;">
+            <h3 style="margin: 0 0 10px 0; color: #333; font-size: 16px;">📊 Focus Mode Statistics</h3>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; font-size: 14px;">
+                <div>
+                    <strong>Total Focus Time:</strong>
+                    <div style="color: #667eea; font-weight: bold; font-size: 18px;" id="focus-total-time">0 minutes</div>
+                </div>
+                <div>
+                    <strong>Tabs Suspended:</strong>
+                    <div style="color: #667eea; font-weight: bold; font-size: 18px;" id="focus-total-tabs">0</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
     <button id="save">Save Settings</button>
     <span class="save-status" id="save-status"></span>
     

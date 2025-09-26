@@ -13,12 +13,21 @@ class PopupManager {
         this.toggleExtensionsButton = document.getElementById('toggle-extensions');
         this.extensionListElement = document.getElementById('extension-list');
         
+        // Focus mode elements
+        this.focusToggleButton = document.getElementById('toggle-focus-mode');
+        this.focusStateElement = document.getElementById('focus-state');
+        this.focusStatsElement = document.getElementById('focus-stats');
+        this.focusTimeElement = document.getElementById('focus-time');
+        this.focusTabsElement = document.getElementById('focus-tabs');
+        this.focusRecommendationsButton = document.getElementById('focus-recommendations');
+        
         this.init();
     }
     
     async init() {
         await this.loadMemoryInfo();
         await this.loadTabList();
+        await this.loadFocusState();
         this.setupEventListeners();
     }
     
@@ -39,10 +48,19 @@ class PopupManager {
             this.toggleExtensionList();
         });
         
+        this.focusToggleButton.addEventListener('click', () => {
+            this.toggleFocusMode();
+        });
+        
+        this.focusRecommendationsButton.addEventListener('click', () => {
+            this.showFocusRecommendations();
+        });
+        
         // Refresh data every 5 seconds
         setInterval(() => {
             this.loadMemoryInfo();
             this.loadTabList();
+            this.loadFocusState();
         }, 5000);
     }
     
@@ -402,6 +420,170 @@ class PopupManager {
             console.error('Failed to disable extension:', error);
             alert(`Failed to disable extension: ${error.message}`);
         }
+    }
+    
+    // Focus Mode Methods
+    async loadFocusState() {
+        try {
+            const response = await this.sendMessage({ action: 'getFocusState' });
+            if (response.success) {
+                const data = response.data;
+                this.updateFocusUI(data.focusMode, data.stats, data.startTime);
+            }
+        } catch (error) {
+            console.error('Failed to load focus state:', error);
+        }
+    }
+    
+    updateFocusUI(isActive, stats, startTime) {
+        // Update state indicator
+        this.focusStateElement.textContent = isActive ? 'ON' : 'OFF';
+        this.focusStateElement.classList.toggle('active', isActive);
+        
+        // Update button
+        this.focusToggleButton.textContent = isActive ? 'Disable Focus Mode' : 'Enable Focus Mode';
+        this.focusToggleButton.classList.toggle('active', isActive);
+        
+        // Show/hide stats
+        if (isActive && stats) {
+            this.focusStatsElement.style.display = 'block';
+            
+            // Calculate active time
+            let totalTime = stats.timeActive;
+            if (startTime) {
+                totalTime += Date.now() - startTime;
+            }
+            const minutes = Math.round(totalTime / 60000);
+            
+            this.focusTimeElement.textContent = minutes > 0 ? `${minutes}m` : '<1m';
+            this.focusTabsElement.textContent = stats.tabsSuspended || 0;
+            
+            // Show recommendations button if focus mode is active
+            this.focusRecommendationsButton.style.display = 'inline-block';
+        } else {
+            this.focusStatsElement.style.display = 'none';
+            this.focusRecommendationsButton.style.display = 'none';
+        }
+    }
+    
+    async toggleFocusMode() {
+        try {
+            this.focusToggleButton.disabled = true;
+            this.focusToggleButton.textContent = 'Switching...';
+            
+            const response = await this.sendMessage({ action: 'toggleFocusMode' });
+            if (response.success) {
+                // UI will be updated by the refresh interval
+                setTimeout(() => this.loadFocusState(), 500);
+            } else {
+                throw new Error(response.error || 'Failed to toggle focus mode');
+            }
+        } catch (error) {
+            console.error('Failed to toggle focus mode:', error);
+            alert(`Failed to toggle focus mode: ${error.message}`);
+        } finally {
+            this.focusToggleButton.disabled = false;
+        }
+    }
+    
+    async showFocusRecommendations() {
+        try {
+            const response = await this.sendMessage({ action: 'getFocusExtensionRecommendations' });
+            if (response.success) {
+                this.renderRecommendationsModal(response.data);
+            }
+        } catch (error) {
+            console.error('Failed to load focus recommendations:', error);
+            alert(`Failed to load recommendations: ${error.message}`);
+        }
+    }
+    
+    renderRecommendationsModal(recommendations) {
+        // Create modal overlay
+        const modal = document.createElement('div');
+        modal.className = 'recommendations-modal';
+        
+        const content = document.createElement('div');
+        content.className = 'recommendations-content';
+        
+        const header = document.createElement('h3');
+        header.textContent = 'Recommended Focus Extensions';
+        header.style.marginTop = '0';
+        content.appendChild(header);
+        
+        const description = document.createElement('p');
+        description.textContent = 'These extensions can enhance your focus mode experience by blocking additional distractions and improving productivity.';
+        description.style.fontSize = '14px';
+        description.style.color = '#666';
+        content.appendChild(description);
+        
+        // Add recommendations
+        recommendations.forEach(rec => {
+            const item = document.createElement('div');
+            item.className = `recommendation-item ${rec.installed ? 'installed' : ''}`;
+            
+            const info = document.createElement('div');
+            info.className = 'recommendation-info';
+            
+            const name = document.createElement('div');
+            name.className = 'recommendation-name';
+            name.textContent = rec.name;
+            
+            const desc = document.createElement('div');
+            desc.className = 'recommendation-desc';
+            desc.textContent = rec.description;
+            
+            const category = document.createElement('span');
+            category.className = 'recommendation-category';
+            category.textContent = rec.category.replace('-', ' ');
+            
+            info.appendChild(name);
+            info.appendChild(desc);
+            info.appendChild(category);
+            
+            const actions = document.createElement('div');
+            actions.className = 'recommendation-actions';
+            
+            if (rec.installed) {
+                const status = document.createElement('span');
+                status.textContent = rec.enabled ? '✓ Enabled' : '⚠ Disabled';
+                status.style.fontSize = '12px';
+                status.style.color = rec.enabled ? '#4CAF50' : '#ff9800';
+                actions.appendChild(status);
+            } else {
+                const installBtn = document.createElement('button');
+                installBtn.textContent = 'Install';
+                installBtn.className = 'install-btn';
+                installBtn.addEventListener('click', () => {
+                    chrome.tabs.create({ url: rec.webstoreUrl });
+                });
+                actions.appendChild(installBtn);
+            }
+            
+            item.appendChild(info);
+            item.appendChild(actions);
+            content.appendChild(item);
+        });
+        
+        // Add close button
+        const closeBtn = document.createElement('button');
+        closeBtn.textContent = 'Close';
+        closeBtn.style.marginTop = '16px';
+        closeBtn.style.width = '100%';
+        closeBtn.addEventListener('click', () => {
+            document.body.removeChild(modal);
+        });
+        content.appendChild(closeBtn);
+        
+        modal.appendChild(content);
+        document.body.appendChild(modal);
+        
+        // Close modal on outside click
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                document.body.removeChild(modal);
+            }
+        });
     }
     
     sendMessage(message) {

@@ -21,6 +21,16 @@ class OptionsManager {
             extensionMemoryThresholdValue: document.getElementById('extension-memory-threshold-value'),
             extensionSuggestions: document.getElementById('extension-suggestions'),
             extensionNotifications: document.getElementById('extension-notifications'),
+            // Focus mode elements
+            focusMode: document.getElementById('focus-mode'),
+            focusAutoSuspend: document.getElementById('focus-auto-suspend'),
+            focusMinimalTheme: document.getElementById('focus-minimal-theme'),
+            focusRemoveDistractions: document.getElementById('focus-remove-distractions'),
+            focusDisableAnimations: document.getElementById('focus-disable-animations'),
+            focusMemoryOptimization: document.getElementById('focus-memory-optimization'),
+            focusExtensionRecommendations: document.getElementById('focus-extension-recommendations'),
+            focusTotalTime: document.getElementById('focus-total-time'),
+            focusTotalTabs: document.getElementById('focus-total-tabs'),
             saveButton: document.getElementById('save'),
             saveStatus: document.getElementById('save-status')
         };
@@ -30,6 +40,7 @@ class OptionsManager {
     
     async init() {
         await this.loadSettings();
+        await this.loadFocusStats();
         this.setupEventListeners();
     }
     
@@ -101,6 +112,15 @@ class OptionsManager {
                 this.elements.extensionSuggestions.checked = settings.extensionSuggestions;
                 this.elements.extensionNotifications.checked = settings.extensionNotifications;
                 
+                // Focus mode settings
+                this.elements.focusMode.checked = settings.focusMode;
+                this.elements.focusAutoSuspend.checked = settings.focusAutoSuspend;
+                this.elements.focusMinimalTheme.checked = settings.focusMinimalTheme;
+                this.elements.focusRemoveDistractions.checked = settings.focusRemoveDistractions;
+                this.elements.focusDisableAnimations.checked = settings.focusDisableAnimations;
+                this.elements.focusMemoryOptimization.checked = settings.focusMemoryOptimization;
+                this.elements.focusExtensionRecommendations.checked = settings.focusExtensionRecommendations;
+                
                 console.log('Settings loaded successfully');
             }
         } catch (error) {
@@ -125,7 +145,15 @@ class OptionsManager {
                 extensionMonitoring: this.elements.extensionMonitoring.checked,
                 extensionMemoryThreshold: parseInt(this.elements.extensionMemoryThreshold.value),
                 extensionSuggestions: this.elements.extensionSuggestions.checked,
-                extensionNotifications: this.elements.extensionNotifications.checked
+                extensionNotifications: this.elements.extensionNotifications.checked,
+                // Focus mode settings
+                focusMode: this.elements.focusMode.checked,
+                focusAutoSuspend: this.elements.focusAutoSuspend.checked,
+                focusMinimalTheme: this.elements.focusMinimalTheme.checked,
+                focusRemoveDistractions: this.elements.focusRemoveDistractions.checked,
+                focusDisableAnimations: this.elements.focusDisableAnimations.checked,
+                focusMemoryOptimization: this.elements.focusMemoryOptimization.checked,
+                focusExtensionRecommendations: this.elements.focusExtensionRecommendations.checked
             };
             
             const response = await this.sendMessage({ 
@@ -153,6 +181,38 @@ class OptionsManager {
         setTimeout(() => {
             this.elements.saveStatus.textContent = '';
         }, 3000);
+    }
+    
+    async loadFocusStats() {
+        try {
+            const response = await this.sendMessage({ action: 'getFocusState' });
+            if (response.success && response.data.stats) {
+                const stats = response.data.stats;
+                
+                // Update total focus time
+                let totalMinutes = Math.round(stats.timeActive / 60000);
+                if (response.data.focusMode && response.data.startTime) {
+                    totalMinutes += Math.round((Date.now() - response.data.startTime) / 60000);
+                }
+                
+                const hours = Math.floor(totalMinutes / 60);
+                const minutes = totalMinutes % 60;
+                
+                let timeText = '';
+                if (hours > 0) {
+                    timeText = `${hours}h ${minutes}m`;
+                } else {
+                    timeText = `${minutes} minutes`;
+                }
+                
+                this.elements.focusTotalTime.textContent = timeText;
+                this.elements.focusTotalTabs.textContent = stats.tabsSuspended || 0;
+            }
+        } catch (error) {
+            console.error('Failed to load focus stats:', error);
+            this.elements.focusTotalTime.textContent = 'Unavailable';
+            this.elements.focusTotalTabs.textContent = 'Unavailable';
+        }
     }
     
     sendMessage(message) {

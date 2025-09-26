@@ -202,6 +202,169 @@
         .disable-btn:hover {
             background: #d32f2f !important;
         }
+        
+        /* Focus Mode Styles */
+        .focus-mode-section {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+        }
+        
+        .focus-status {
+            margin-bottom: 12px;
+        }
+        
+        .focus-indicator {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        
+        .focus-icon {
+            font-size: 18px;
+            margin-right: 8px;
+        }
+        
+        .focus-text {
+            flex: 1;
+            font-weight: bold;
+            font-size: 16px;
+        }
+        
+        .focus-state {
+            font-size: 12px;
+            padding: 2px 8px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.2);
+            font-weight: bold;
+        }
+        
+        .focus-state.active {
+            background: #4CAF50;
+            color: white;
+        }
+        
+        .focus-stats {
+            font-size: 12px;
+            opacity: 0.9;
+        }
+        
+        .stat-item {
+            margin-right: 16px;
+        }
+        
+        .focus-controls {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .focus-toggle {
+            background: rgba(255, 255, 255, 0.2) !important;
+            border: 1px solid rgba(255, 255, 255, 0.3) !important;
+            color: white !important;
+            flex: 1;
+        }
+        
+        .focus-toggle:hover {
+            background: rgba(255, 255, 255, 0.3) !important;
+        }
+        
+        .focus-toggle.active {
+            background: #f44336 !important;
+            border-color: #d32f2f !important;
+        }
+        
+        .focus-toggle.active:hover {
+            background: #d32f2f !important;
+        }
+        
+        .focus-mode-section button.secondary {
+            background: rgba(255, 255, 255, 0.1) !important;
+            border: 1px solid rgba(255, 255, 255, 0.2) !important;
+            color: rgba(255, 255, 255, 0.9) !important;
+        }
+        
+        .focus-mode-section button.secondary:hover {
+            background: rgba(255, 255, 255, 0.2) !important;
+        }
+        
+        /* Extension Recommendations Modal */
+        .recommendations-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        
+        .recommendations-content {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            max-width: 400px;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        
+        .recommendation-item {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            margin-bottom: 8px;
+        }
+        
+        .recommendation-item.installed {
+            background: #f0f8ff;
+            border-color: #2196F3;
+        }
+        
+        .recommendation-info {
+            flex: 1;
+        }
+        
+        .recommendation-name {
+            font-weight: bold;
+            font-size: 14px;
+            margin-bottom: 4px;
+        }
+        
+        .recommendation-desc {
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .recommendation-category {
+            display: inline-block;
+            background: #e3f2fd;
+            color: #1976d2;
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-size: 10px;
+            margin-top: 4px;
+        }
+        
+        .recommendation-actions {
+            margin-left: 12px;
+        }
+        
+        .install-btn {
+            background: #4CAF50 !important;
+            font-size: 11px !important;
+            padding: 6px 12px !important;
+        }
+        
+        .install-btn:hover {
+            background: #45a049 !important;
+        }
     </style>
 </head>
 <body>
@@ -213,6 +376,24 @@
     <div class="memory-info">
         <div class="memory-usage">
             Memory Usage: <span id="memory-usage">Loading...</span>
+        </div>
+    </div>
+    
+    <div class="focus-mode-section">
+        <div id="focus-mode-status" class="focus-status">
+            <div class="focus-indicator" id="focus-indicator">
+                <span class="focus-icon" id="focus-icon">🎯</span>
+                <span class="focus-text" id="focus-text">Focus Mode</span>
+                <span class="focus-state" id="focus-state">OFF</span>
+            </div>
+            <div class="focus-stats" id="focus-stats" style="display: none;">
+                <span class="stat-item">⏰ <span id="focus-time">0m</span></span>
+                <span class="stat-item">📑 <span id="focus-tabs">0</span> suspended</span>
+            </div>
+        </div>
+        <div class="focus-controls">
+            <button id="toggle-focus-mode" class="focus-toggle">Enable Focus Mode</button>
+            <button id="focus-recommendations" class="secondary" style="display: none;">Recommended Extensions</button>
         </div>
     </div>
     

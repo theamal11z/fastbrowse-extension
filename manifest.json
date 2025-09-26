@@ -9,7 +9,9 @@
     "storage",
     "system.memory",
     "notifications",
-    "management"
+    "management",
+    "activeTab",
+    "scripting"
   ],
   
   "background": {
@@ -38,9 +40,18 @@
     "<all_urls>"
   ],
   
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content/focus-mode.js"],
+      "css": ["src/content/focus-mode.css"],
+      "run_at": "document_start"
+    }
+  ],
+  
   "web_accessible_resources": [
     {
-      "resources": ["assets/*"],
+      "resources": ["assets/*", "src/content/*"],
       "matches": ["<all_urls>"]
     }
   ]
