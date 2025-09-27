@@ -333,6 +333,23 @@ Settings (Options → GPU Acceleration Control):
 - Hardware Acceleration mode
 - WebGL Profile + toggles (Force high-performance GPU, Antialias, Preserve drawing buffer)
 
+### Speed Dashboard
+
+1. **Page Load Timelines**
+   - Navigation timings: DOMContentLoaded, Load, responseStart, duration
+   - Paint timings: First Paint (FP), First Contentful Paint (FCP)
+   - Largest Contentful Paint (LCP) when available
+2. **Network Waterfall Charts**
+   - Sample of slowest resources with simple per-page bar chart
+   - Shows initiator type, duration, and relative bar width
+3. **Performance Score**
+   - Simple 0–100 heuristic based on FCP/LCP/DCL/Load
+   - Higher is better; quick way to compare recent pages
+
+Settings (Options → Speed Dashboard):
+- Enable Speed Dashboard
+- Refresh/clear history from the Options page
+
 ## 🔧 Development
 
 ### Prerequisites

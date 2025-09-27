@@ -103,6 +103,12 @@ class OptionsManager {
             flagGpuRasterization: document.getElementById('flag-gpu-rasterization'),
             flagParallelDownloading: document.getElementById('flag-parallel-downloading'),
             flagsExperimentalToggle: document.getElementById('flags-experimental-toggle'),
+            // Speed Dashboard elements
+            speedDashboardEnabled: document.getElementById('speed-dashboard-enabled'),
+            refreshSpeed: document.getElementById('refresh-speed'),
+            clearSpeed: document.getElementById('clear-speed'),
+            speedStatus: document.getElementById('speed-status'),
+            speedList: document.getElementById('speed-dashboard-list'),
             copyFlagsBtn: document.getElementById('copy-flags'),
             copyFullCommandBtn: document.getElementById('copy-full-command'),
             flagsCopyStatus: document.getElementById('flags-copy-status'),
@@ -150,6 +156,7 @@ class OptionsManager {
         await this.loadFocusStats();
         await this.loadTagStats();
         await this.loadRestorationStats();
+        await this.loadSpeedDashboard();
         await this.loadContextInfo();
         this.setupEventListeners();
     }
@@ -273,6 +280,11 @@ class OptionsManager {
             this.elements.memoryCompressionAlgo.addEventListener('change', () => this.saveSettings());
         }
         
+        // Speed Dashboard listeners
+        if (this.elements.speedDashboardEnabled) this.elements.speedDashboardEnabled.addEventListener('change', () => this.saveSettings());
+        if (this.elements.refreshSpeed) this.elements.refreshSpeed.addEventListener('click', () => this.loadSpeedDashboard());
+        if (this.elements.clearSpeed) this.elements.clearSpeed.addEventListener('click', () => this.clearSpeedDashboard());
+
         // Flags Manager listeners
         if (this.elements.flagsManagerEnabled) this.elements.flagsManagerEnabled.addEventListener('change', () => this.saveSettings());
         if (this.elements.flagGpuRasterization) this.elements.flagGpuRasterization.addEventListener('change', () => this.saveSettings());
@@ -493,6 +505,9 @@ class OptionsManager {
                 if (this.elements.flagGpuRasterization) this.elements.flagGpuRasterization.checked = !!settings.flagsEnableGpuRasterization;
                 if (this.elements.flagParallelDownloading) this.elements.flagParallelDownloading.checked = !!settings.flagsEnableParallelDownloading;
                 if (this.elements.flagsExperimentalToggle) this.elements.flagsExperimentalToggle.checked = !!settings.flagsExperimentalToggle;
+
+                // Speed Dashboard
+                if (this.elements.speedDashboardEnabled) this.elements.speedDashboardEnabled.checked = settings.speedDashboardEnabled !== false;
                 
                 // Extension monitoring settings
                 this.elements.extensionMonitoring.checked = settings.extensionMonitoring;
@@ -865,6 +880,132 @@ class OptionsManager {
                 this.elements.lastContextCheck.textContent = 'Never';
             }
         }
+    }
+
+    async loadSpeedDashboard() {
+        try {
+            const resp = await this.sendMessage({ action: 'getSpeedSessions' });
+            if (!resp.success) throw new Error(resp.error || 'Failed');
+            const list = resp.data || [];
+            this.renderSpeedList(list);
+        } catch (e) {
+            if (this.elements.speedStatus) {
+                this.elements.speedStatus.textContent = 'Failed to load';
+                setTimeout(() => { this.elements.speedStatus.textContent=''; }, 2000);
+            }
+        }
+    }
+
+    async clearSpeedDashboard() {
+        try {
+            const resp = await this.sendMessage({ action: 'clearSpeedSessions' });
+            if (!resp.success) throw new Error(resp.error || 'Failed');
+            if (this.elements.speedStatus) {
+                this.elements.speedStatus.textContent = 'Cleared';
+                setTimeout(() => { this.elements.speedStatus.textContent=''; }, 1500);
+            }
+            this.renderSpeedList([]);
+        } catch (e) {
+            if (this.elements.speedStatus) {
+                this.elements.speedStatus.textContent = 'Failed to clear';
+                setTimeout(() => { this.elements.speedStatus.textContent=''; }, 2000);
+            }
+        }
+    }
+
+    renderSpeedList(items) {
+        const root = this.elements.speedList;
+        if (!root) return;
+        root.innerHTML = '';
+        if (!items || items.length === 0) {
+            const empty = document.createElement('div');
+            empty.textContent = 'No data yet. Browse some pages and come back.';
+            empty.style.color = '#777';
+            root.appendChild(empty);
+            return;
+        }
+        // Limit to 10 for UI
+        const slice = items.slice(0, 10);
+        slice.forEach(item => {
+            const wrap = document.createElement('div');
+            wrap.style.border = '1px solid #eee';
+            wrap.style.borderRadius = '6px';
+            wrap.style.padding = '12px';
+
+            const header = document.createElement('div');
+            header.style.display = 'flex';
+            header.style.justifyContent = 'space-between';
+            header.style.gap = '8px';
+            const left = document.createElement('div');
+            left.style.fontSize = '13px';
+            left.style.color = '#333';
+            left.textContent = `${new URL(item.url).hostname} — ${new Date(item.ts).toLocaleTimeString()}`;
+            const right = document.createElement('div');
+            right.style.fontSize = '13px';
+            right.innerHTML = `<strong>Score:</strong> <span style="color:${item.score>=80?'#4caf50':item.score>=60?'#ff9800':'#f44336'}">${item.score}</span>`;
+            header.appendChild(left); header.appendChild(right);
+            wrap.appendChild(header);
+
+            const t = item.timings || {};
+            const p = item.paints || {};
+            const grid = document.createElement('div');
+            grid.style.display = 'grid';
+            grid.style.gridTemplateColumns = 'repeat(4, 1fr)';
+            grid.style.gap = '6px';
+            grid.style.marginTop = '8px';
+            grid.innerHTML = `
+                <div><strong>FCP</strong><div>${Math.round(p.firstContentfulPaint||0)} ms</div></div>
+                <div><strong>LCP</strong><div>${Math.round(item.lcp||0)} ms</div></div>
+                <div><strong>DCL</strong><div>${Math.round(t.domContentLoadedEventEnd||0)} ms</div></div>
+                <div><strong>Load</strong><div>${Math.round(t.loadEventEnd||0)} ms</div></div>
+            `;
+            wrap.appendChild(grid);
+
+            // Waterfall
+            const resources = item.resources || [];
+            if (resources.length > 0) {
+                const waterfall = document.createElement('div');
+                waterfall.style.marginTop = '8px';
+                const maxDur = Math.max(...resources.map(r => r.duration || 1), 1);
+                resources.slice(0, 12).forEach(r => {
+                    const row = document.createElement('div');
+                    row.style.display = 'flex';
+                    row.style.alignItems = 'center';
+                    row.style.gap = '8px';
+                    row.style.margin = '2px 0';
+                    const label = document.createElement('div');
+                    label.style.flex = '0 0 160px';
+                    label.style.fontSize = '11px';
+                    label.style.color = '#666';
+                    label.style.whiteSpace = 'nowrap';
+                    label.style.overflow = 'hidden';
+                    label.style.textOverflow = 'ellipsis';
+                    label.title = r.name;
+                    label.textContent = (r.initiatorType||'res')+': '+(r.name || '').replace(/^https?:\/\//,'');
+                    const barWrap = document.createElement('div');
+                    barWrap.style.flex = '1';
+                    barWrap.style.background = '#f1f1f1';
+                    barWrap.style.borderRadius = '3px';
+                    const bar = document.createElement('div');
+                    const w = Math.max(2, Math.round((r.duration / maxDur) * 100));
+                    bar.style.width = w + '%';
+                    bar.style.height = '8px';
+                    bar.style.background = '#2196f3';
+                    bar.style.borderRadius = '3px';
+                    barWrap.appendChild(bar);
+                    const time = document.createElement('div');
+                    time.style.flex = '0 0 60px';
+                    time.style.textAlign = 'right';
+                    time.style.fontSize = '11px';
+                    time.textContent = `${r.duration} ms`;
+                    row.appendChild(label); row.appendChild(barWrap); row.appendChild(time);
+                    waterfall.appendChild(row);
+                });
+                wrap.appendChild(waterfall);
+            }
+
+            root.appendChild(wrap);
+        });
     }
 
     applyWebglPresetToUI(profile) {

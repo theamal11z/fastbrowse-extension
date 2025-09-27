@@ -5,6 +5,9 @@ class FastBrowse {
     constructor() {
 this.settings = {
             autoSuspend: true,
+            // Speed Dashboard
+            speedDashboardEnabled: true,
+            speedRetainEntries: 50,
             // GPU Acceleration Control
             gpuAccelEnabled: true,
             gpuMode: 'auto', // 'auto' | 'conservative' | 'balanced' | 'aggressive'
@@ -327,6 +330,18 @@ this.settings = {
                         chrome.scripting.executeScript({
                             target: { tabId },
                             files: ['src/content/network-optimization.js']
+                        }).catch(() => {});
+                    }
+                }
+            } catch (_) {}
+
+            // Inject speed metrics collector on completed loads
+            try {
+                if (changeInfo.status === 'complete' && this.settings.speedDashboardEnabled) {
+                    if (tab && tab.url && tab.url.startsWith('http')) {
+                        chrome.scripting.executeScript({
+                            target: { tabId },
+                            files: ['src/content/speed-metrics.js']
                         }).catch(() => {});
                     }
                 }
@@ -3638,6 +3653,33 @@ this.restorationStats.memoryOptimized++;
                         sendResponse({ success: false, error: error.message });
                     }
                     break;
+
+                // Speed Dashboard handlers
+                case 'recordSpeedMetrics':
+                    try {
+                        await this.recordSpeedSession(request.data);
+                        sendResponse({ success: true });
+                    } catch (error) {
+                        console.error('recordSpeedMetrics failed:', error);
+                        sendResponse({ success: false, error: error.message });
+                    }
+                    break;
+                case 'getSpeedSessions':
+                    try {
+                        const list = await this.getSpeedSessions();
+                        sendResponse({ success: true, data: list });
+                    } catch (error) {
+                        sendResponse({ success: false, error: error.message });
+                    }
+                    break;
+                case 'clearSpeedSessions':
+                    try {
+                        await chrome.storage.local.remove(['fastbrowse_speed_sessions']);
+                        sendResponse({ success: true });
+                    } catch (error) {
+                        sendResponse({ success: false, error: error.message });
+                    }
+                    break;
                     
                 case 'restoreFromSuspended':
                     try {
@@ -3662,6 +3704,59 @@ this.restorationStats.memoryOptimized++;
         }
     }
     
+    // Speed Dashboard helpers
+    async recordSpeedSession(payload) {
+        try {
+            const now = Date.now();
+            const entry = {
+                ts: now,
+                url: payload?.url || 'about:blank',
+                origin: (() => { try { return new URL(payload?.url).origin; } catch (_) { return ''; } })(),
+                timings: payload?.timings || {},
+                paints: payload?.paints || {},
+                lcp: payload?.lcp || null,
+                resources: (payload?.resources || []).slice(0, 100),
+                score: this.computePerfScore(payload)
+            };
+            const key = 'fastbrowse_speed_sessions';
+            const obj = await chrome.storage.local.get([key]);
+            const arr = Array.isArray(obj[key]) ? obj[key] : [];
+            arr.unshift(entry);
+            const max = Math.max(1, Number(this.settings.speedRetainEntries || 50));
+            const trimmed = arr.slice(0, max);
+            await chrome.storage.local.set({ [key]: trimmed });
+        } catch (e) {
+            console.debug('recordSpeedSession failed', e);
+        }
+    }
+
+    computePerfScore(payload) {
+        try {
+            const t = payload?.timings || {};
+            const p = payload?.paints || {};
+            const lcp = payload?.lcp || 0;
+            const fcp = p.firstContentfulPaint || 0;
+            const dcl = t.domContentLoadedEventEnd || 0;
+            const load = t.loadEventEnd || 0;
+            // Simple heuristic: start at 100, subtract weighted ms/100
+            let score = 100;
+            if (fcp) score -= Math.min(50, fcp / 100);
+            if (lcp) score -= Math.min(30, lcp / 150);
+            if (dcl) score -= Math.min(15, dcl / 200);
+            if (load) score -= Math.min(15, load / 300);
+            score = Math.max(0, Math.min(100, Math.round(score)));
+            return score;
+        } catch (_) { return 0; }
+    }
+
+    async getSpeedSessions() {
+        try {
+            const key = 'fastbrowse_speed_sessions';
+            const obj = await chrome.storage.local.get([key]);
+            return Array.isArray(obj[key]) ? obj[key] : [];
+        } catch (_) { return []; }
+    }
+
     // ============================================================================
     // CONTEXT MENUS AND KEYBOARD SHORTCUTS
     // ============================================================================
