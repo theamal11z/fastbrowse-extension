@@ -15,6 +15,8 @@ FastBrowse is a powerful Chrome extension designed to minimize browser memory co
 - **Tab Protection**: Automatically protects pinned tabs, tabs playing audio, and system pages
 - **Extension Memory Analysis**: Identifies memory-heavy extensions and provides optimization suggestions
 - **Emergency Suspend**: Automatically suspends tabs during high memory pressure situations
+- **Memory Compression for Suspended Tabs**: Stores minimal tab state (URL, title, scroll position, non-sensitive form values) in compressed form and restores it on resume
+- **Tag-Based Memory Policies**: Configure suspension behavior per tag category (e.g., Work → longer delays, Reference → never suspend during work hours)
 
 ### 🎯 Focus Mode
 - **Distraction Removal**: Automatically hides distracting elements on major websites (YouTube suggestions, social media feeds, ads, etc.)
@@ -175,6 +177,15 @@ FastBrowse is a powerful Chrome extension designed to minimize browser memory co
    - Show warnings when memory usage is high
    - Display focus mode recommendations
 
+#### Tag-Based Memory Policies
+1. **Enable tag-based suspension policies**: Turn on policy-based behavior for specific tag categories
+2. **Work tabs delay multiplier**: Choose 1–5× to lengthen suspension delay for tabs with a “Work” tag
+3. **Reference tabs protection**: Prevent suspension of “Reference” tagged tabs during work hours (uses your configured work days/hours)
+
+Notes:
+- Policy detection is name-based and case-insensitive (e.g., tags containing “work” or “reference”).
+- Work hours are configured in the Context-Aware section (start/end and days).
+
 ## 🛠️ Technical Details
 
 ### Architecture
@@ -213,6 +224,11 @@ FastBrowse uses Chrome Extension Manifest V3 with the following components:
 4. **Smart Memory Alerts**:
    - Requires sustained high memory across checks
    - Suppresses alerts/actions unless Chrome had recent focus and there are enough unsuspended tabs
+5. **Memory Compression for Suspended Tabs**:
+   - Captures minimal state (URL, title, scroll position, non-sensitive form values)
+   - Compresses and stores snapshot in `chrome.storage.local` (uses `CompressionStream` gzip/deflate when available; falls back to base64)
+   - Restores state on resume and cleans up the stored snapshot
+   - Never captures sensitive inputs (password/hidden)
 
 ### Memory-Aware Restoration Strategy
 
@@ -282,9 +298,10 @@ fastbrowse-extension/
 │   ├── offscreen.html     # Offscreen document for Focus Music playback
 │   ├── offscreen.js       # Offscreen audio controller
 │   └── content/
-│       ├── focus-mode.js  # Focus mode content script
-│       ├── focus-mode.css # Focus mode styling
-│       └── lite-mode.js   # Lite mode restoration content script
+│       ├── focus-mode.js      # Focus mode content script
+│       ├── focus-mode.css     # Focus mode styling
+│       ├── lite-mode.js       # Lite mode restoration content script
+│       └── state-snapshot.js  # Minimal state snapshot/restore script
 ├── assets/
 │   ├── icon16.png         # 16x16 extension icon
 │   ├── icon48.png         # 48x48 extension icon
@@ -347,12 +364,24 @@ Use Chrome Task Manager (`Shift+Esc`) to monitor:
 - Overall browser memory reduction after suspending tabs
 - Memory usage recovery when tabs are restored
 
+### State Snapshot/Restore Testing
+
+1. Open a page with a form and scroll down
+2. Type into non-sensitive inputs (text/textarea/select) and optionally checkboxes
+3. Suspend the tab using the popup (or wait for auto-suspend)
+4. Restore the tab (Full or Lite). After load:
+   - Scroll position should be restored
+   - Non-sensitive form values should be re-applied
+5. Verify in background console for snapshot/restore logs; stored snapshot is removed after successful restore
+
 ## 🚫 Limitations
 
 - **Chrome Extension API Limitations**: Cannot suspend certain system pages or extensions
 - **Active Tab Detection**: May occasionally suspend tabs that appear inactive but are actually in use
 - **Memory API Accuracy**: System memory reporting may vary by operating system
 - **Background Script Persistence**: Service worker may need to restart, causing brief delays
+- **State Snapshot Scope**: Snapshot/restore cannot run on restricted pages (chrome://, chrome-extension://, etc.) and won’t store state for those tabs
+- **Form State Coverage**: Only non-sensitive inputs are captured (password/hidden excluded); complex web app state outside standard form fields isn’t captured
 
 ## 🔒 Privacy & Security
 

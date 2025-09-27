@@ -109,6 +109,31 @@
         </label>
         <div class="description">Automatically suspend tabs when system memory usage exceeds the threshold</div>
         
+        <div class="subsection" style="margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 6px;">
+            <h3 style="margin: 0 0 15px 0; font-size: 16px; color: #333;">🗜️ Memory Compression for Suspended Tabs</h3>
+            <label>
+                <input type="checkbox" id="memory-compression-enabled">
+                Enable memory compression and state restoration
+            </label>
+            <div class="description">Save minimal tab state (URL, title, scroll, non-sensitive form values) to restore on resume</div>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 10px;">
+                <label style="display: flex; align-items: center; gap: 8px;">
+                    <input type="checkbox" id="snapshot-scroll"> Capture scroll position
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px;">
+                    <input type="checkbox" id="snapshot-forms"> Capture non-sensitive form values
+                </label>
+            </div>
+            
+            <label style="margin-top: 10px;">Compression algorithm:</label>
+            <select id="memory-compression-algo" style="padding: 6px; border: 1px solid #ddd; border-radius: 4px; width: 180px;">
+                <option value="gzip">gzip (recommended)</option>
+                <option value="deflate">deflate</option>
+                <option value="none">none</option>
+            </select>
+        </div>
+        
         <label>
             <input type="checkbox" id="memory-smart-mode"> 
             Smart memory alerts (only alert when Chrome is likely responsible)
@@ -291,6 +316,29 @@
             <span class="range-value" id="tag-inactivity-days-value">30</span>
         </div>
         <div class="description">Unused tags will be automatically removed after this many days</div>
+        
+        <div class="subsection" style="margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 6px;">
+            <h3 style="margin: 0 0 15px 0; font-size: 16px; color: #333;">🧠 Tag-Based Memory Policies</h3>
+
+            <label>
+                <input type="checkbox" id="tag-policy-enabled">
+                Enable tag-based suspension policies
+            </label>
+            <div class="description">Apply different suspension rules for specific tag categories</div>
+
+            <label>Work tabs: suspension delay multiplier</label>
+            <div class="range-container">
+                <input type="range" id="work-tag-delay-multiplier" min="1" max="5" value="3">
+                <span class="range-value" id="work-tag-delay-multiplier-value">3</span>
+            </div>
+            <div class="description">Example: 3 = Work-tagged tabs suspend 3× slower</div>
+
+            <label>
+                <input type="checkbox" id="reference-no-suspend-during-work">
+                Reference tabs: never suspend during work hours
+            </label>
+            <div class="description">If a tab has a "Reference" tag, it remains active during work hours</div>
+        </div>
         
         <div class="tag-stats" style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 6px; border-left: 4px solid #2196f3;">
             <h3 style="margin: 0 0 10px 0; color: #333; font-size: 16px;">📊 Tag Statistics</h3>

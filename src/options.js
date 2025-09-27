@@ -11,6 +11,11 @@ class OptionsManager {
             memoryLimit: document.getElementById('memory-limit'),
             memoryLimitValue: document.getElementById('memory-limit-value'),
             memorySmartMode: document.getElementById('memory-smart-mode'),
+            // Memory compression controls
+            memoryCompressionEnabled: document.getElementById('memory-compression-enabled'),
+            snapshotScroll: document.getElementById('snapshot-scroll'),
+            snapshotForms: document.getElementById('snapshot-forms'),
+            memoryCompressionAlgo: document.getElementById('memory-compression-algo'),
             protectPinned: document.getElementById('protect-pinned'),
             protectAudio: document.getElementById('protect-audio'),
             protectForms: document.getElementById('protect-forms'),
@@ -43,6 +48,11 @@ class OptionsManager {
             maxTagsPerTabValue: document.getElementById('max-tags-per-tab-value'),
             tagInactivityDays: document.getElementById('tag-inactivity-days'),
             tagInactivityDaysValue: document.getElementById('tag-inactivity-days-value'),
+            // Tag-based memory policies elements
+            tagPolicyEnabled: document.getElementById('tag-policy-enabled'),
+            workTagDelayMultiplier: document.getElementById('work-tag-delay-multiplier'),
+            workTagDelayMultiplierValue: document.getElementById('work-tag-delay-multiplier-value'),
+            referenceNoSuspendDuringWork: document.getElementById('reference-no-suspend-during-work'),
             totalTagsCount: document.getElementById('total-tags-count'),
             frequentTagsCount: document.getElementById('frequent-tags-count'),
             taggedTabsCount: document.getElementById('tagged-tabs-count'),
@@ -138,6 +148,22 @@ class OptionsManager {
             this.elements.tagInactivityDaysValue.textContent = this.elements.tagInactivityDays.value;
         });
         
+        // Tag-based memory policies listeners
+        if (this.elements.workTagDelayMultiplier) {
+            this.elements.workTagDelayMultiplier.addEventListener('input', () => {
+                this.elements.workTagDelayMultiplierValue.textContent = this.elements.workTagDelayMultiplier.value;
+            });
+            this.elements.workTagDelayMultiplier.addEventListener('change', () => {
+                this.saveSettings();
+            });
+        }
+        if (this.elements.tagPolicyEnabled) {
+            this.elements.tagPolicyEnabled.addEventListener('change', () => this.saveSettings());
+        }
+        if (this.elements.referenceNoSuspendDuringWork) {
+            this.elements.referenceNoSuspendDuringWork.addEventListener('change', () => this.saveSettings());
+        }
+        
         // Restoration settings range updates
         if (this.elements.liteRestorationThreshold) {
             this.elements.liteRestorationThreshold.addEventListener('input', () => {
@@ -161,6 +187,20 @@ class OptionsManager {
             this.elements.restorationMemoryBuffer.addEventListener('input', () => {
                 this.elements.restorationMemoryBufferValue.textContent = this.elements.restorationMemoryBuffer.value;
             });
+        }
+        
+        // Memory compression listeners
+        if (this.elements.memoryCompressionEnabled) {
+            this.elements.memoryCompressionEnabled.addEventListener('change', () => this.saveSettings());
+        }
+        if (this.elements.snapshotScroll) {
+            this.elements.snapshotScroll.addEventListener('change', () => this.saveSettings());
+        }
+        if (this.elements.snapshotForms) {
+            this.elements.snapshotForms.addEventListener('change', () => this.saveSettings());
+        }
+        if (this.elements.memoryCompressionAlgo) {
+            this.elements.memoryCompressionAlgo.addEventListener('change', () => this.saveSettings());
         }
         
         // Save button
@@ -310,6 +350,20 @@ class OptionsManager {
                 this.elements.showNotifications.checked = settings.showNotifications;
                 this.elements.memoryWarnings.checked = settings.memoryWarnings;
                 
+                // Memory compression settings
+                if (this.elements.memoryCompressionEnabled) {
+                    this.elements.memoryCompressionEnabled.checked = settings.memoryCompressionEnabled !== false;
+                }
+                if (this.elements.snapshotScroll) {
+                    this.elements.snapshotScroll.checked = settings.snapshotScroll !== false;
+                }
+                if (this.elements.snapshotForms) {
+                    this.elements.snapshotForms.checked = settings.snapshotForms !== false;
+                }
+                if (this.elements.memoryCompressionAlgo) {
+                    this.elements.memoryCompressionAlgo.value = settings.memoryCompressionAlgo || 'gzip';
+                }
+                
                 // Extension monitoring settings
                 this.elements.extensionMonitoring.checked = settings.extensionMonitoring;
                 this.elements.extensionMemoryThreshold.value = settings.extensionMemoryThreshold;
@@ -337,6 +391,18 @@ class OptionsManager {
                 this.elements.maxTagsPerTabValue.textContent = settings.maxTagsPerTab;
                 this.elements.tagInactivityDays.value = settings.tagInactivityDays;
                 this.elements.tagInactivityDaysValue.textContent = settings.tagInactivityDays;
+                
+                // Tag-based memory policies
+                if (this.elements.tagPolicyEnabled) {
+                    this.elements.tagPolicyEnabled.checked = settings.tagPolicyEnabled !== false;
+                }
+                if (this.elements.workTagDelayMultiplier) {
+                    this.elements.workTagDelayMultiplier.value = settings.workTagDelayMultiplier || 3;
+                    this.elements.workTagDelayMultiplierValue.textContent = settings.workTagDelayMultiplier || 3;
+                }
+                if (this.elements.referenceNoSuspendDuringWork) {
+                    this.elements.referenceNoSuspendDuringWork.checked = settings.referenceNoSuspendDuringWork !== false;
+                }
                 
                 // Memory-aware restoration settings
                 if (this.elements.memoryAwareRestoration) {
@@ -403,6 +469,11 @@ class OptionsManager {
                 protectForms: this.elements.protectForms.checked,
                 showNotifications: this.elements.showNotifications.checked,
                 memoryWarnings: this.elements.memoryWarnings.checked,
+                // Memory compression
+                memoryCompressionEnabled: this.elements.memoryCompressionEnabled ? this.elements.memoryCompressionEnabled.checked : true,
+                snapshotScroll: this.elements.snapshotScroll ? this.elements.snapshotScroll.checked : true,
+                snapshotForms: this.elements.snapshotForms ? this.elements.snapshotForms.checked : true,
+                memoryCompressionAlgo: this.elements.memoryCompressionAlgo ? this.elements.memoryCompressionAlgo.value : 'gzip',
                 // Extension monitoring settings
                 extensionMonitoring: this.elements.extensionMonitoring.checked,
                 extensionMemoryThreshold: parseInt(this.elements.extensionMemoryThreshold.value),
@@ -425,6 +496,17 @@ class OptionsManager {
                 maxTagsPerTab: parseInt(this.elements.maxTagsPerTab.value),
                 tagInactivityDays: parseInt(this.elements.tagInactivityDays.value)
             };
+            
+            // Tag-based memory policies
+            if (this.elements.tagPolicyEnabled) {
+                settings.tagPolicyEnabled = this.elements.tagPolicyEnabled.checked;
+            }
+            if (this.elements.workTagDelayMultiplier) {
+                settings.workTagDelayMultiplier = parseInt(this.elements.workTagDelayMultiplier.value);
+            }
+            if (this.elements.referenceNoSuspendDuringWork) {
+                settings.referenceNoSuspendDuringWork = this.elements.referenceNoSuspendDuringWork.checked;
+            }
             
             // Add restoration settings if elements exist
             if (this.elements.memoryAwareRestoration) {

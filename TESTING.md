@@ -155,6 +155,31 @@ chrome.system.memory.getInfo().then(console.log)
 3. **Individual tabs**: Suspended tabs show ~1-10MB vs 100MB+ for active tabs
 4. **Extension overhead**: FastBrowse itself should use minimal memory (<5MB)
 
+## State Snapshot/Restore Testing
+
+1. Open a page with a form and scroll down
+2. Enter values in non-sensitive inputs (text/textarea/select) and checkboxes as needed
+3. Trigger suspension (Popup → Suspend All Tabs or wait for auto-suspend)
+4. Restore the tab (Full or Lite)
+5. Verify scroll position and form values are restored
+6. Check background console for snapshot/restore logs; snapshot storage entry should be removed post-restore
+
+Note: Restricted pages (chrome://, chrome-extension://, etc.) cannot be snapshotted.
+
+## Tag-Based Memory Policies Testing
+
+1. Ensure Tags are enabled in Options
+2. Create or assign tags with names containing "Work" and "Reference"
+3. In Options → Tag Management → Tag-Based Memory Policies:
+   - Enable policies
+   - Set Work delay multiplier (e.g., 3)
+   - Enable "Reference: never suspend during work hours"
+4. Configure work hours/days under Context-Aware settings
+5. Open multiple tabs and assign tags
+6. Activate another tab and wait:
+   - Work-tagged tabs should suspend later (delay × multiplier)
+   - Reference-tagged tabs should not suspend during work hours
+
 ## Next Steps for Issues
 
 If suspension still doesn't work:

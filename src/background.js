@@ -3,8 +3,17 @@
 
 class FastBrowse {
     constructor() {
-        this.settings = {
+this.settings = {
             autoSuspend: true,
+            // Memory compression for suspended tabs
+            memoryCompressionEnabled: true,
+            memoryCompressionAlgo: 'gzip', // 'gzip' | 'deflate' | 'none'
+            snapshotScroll: true,
+            snapshotForms: true,
+            // Tag-Based Memory Policies
+            tagPolicyEnabled: true,
+            workTagDelayMultiplier: 3, // Work-tagged tabs get 3x longer delay
+            referenceNoSuspendDuringWork: true,
             suspendDelay: 1, // minutes - start with 1 minute for testing
             memoryThreshold: true,
             memoryLimit: 80, // percentage
@@ -457,15 +466,22 @@ class FastBrowse {
         
         // First check if the tab still exists before setting a timer
         try {
-            await chrome.tabs.get(tabId);
+            const tab = await chrome.tabs.get(tabId);
+
+            // Compute effective delay based on tag policies
+            const delayMs = await this.computeEffectiveSuspendDelay(tab);
+            if (delayMs === null) {
+                console.log(`Skipping suspend timer for tab ${tabId} due to tag policy`);
+                return;
+            }
             
-            const delay = this.settings.suspendDelay * 60 * 1000; // Convert to milliseconds
             const timer = setTimeout(() => {
                 this.suspendTab(tabId);
-            }, delay);
+            }, delayMs);
             
             this.tabTimers.set(tabId, timer);
-            console.log(`Timer set for tab ${tabId} - will suspend in ${this.settings.suspendDelay} minutes`);
+            const minutes = Math.round(delayMs / 60000);
+            console.log(`Timer set for tab ${tabId} - will suspend in ${minutes} minutes`);
         } catch (error) {
             // Tab doesn't exist anymore, no need to set a timer
             if (error.message && error.message.includes('No tab with id')) {
@@ -475,10 +491,10 @@ class FastBrowse {
             // For other errors, log but still try to set the timer
             console.error(`Error checking tab existence for ${tabId}:`, error);
             
-            const delay = this.settings.suspendDelay * 60 * 1000;
+            const delayMs = this.settings.suspendDelay * 60 * 1000;
             const timer = setTimeout(() => {
                 this.suspendTab(tabId);
-            }, delay);
+            }, delayMs);
             
             this.tabTimers.set(tabId, timer);
         }
@@ -518,6 +534,15 @@ class FastBrowse {
                 return;
             }
             
+// Optionally capture and store minimal tab state before discarding
+            if (this.settings.memoryCompressionEnabled) {
+                try {
+                    await this.captureAndStoreTabState(tab);
+                } catch (snapErr) {
+                    console.debug(`Snapshot failed for tab ${tabId}:`, snapErr);
+                }
+            }
+
             // Store tab information before discarding (with defensive checks)
             this.suspendedTabs.set(tabId, {
                 url: tab.url || 'about:blank',
@@ -596,69 +621,21 @@ class FastBrowse {
         try {
             // First check if tab still exists
             await chrome.tabs.get(tabId);
-            
-            // Create a data URL with suspend page content (with safe fallbacks)
-            const safeTitle = (originalTab.title || 'Unknown Tab').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+            const safeTitle = (originalTab.title || 'Unknown Tab').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;');
             const safeUrl = originalTab.url || 'about:blank';
-            const suspendPageHTML = `
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <meta charset="utf-8">
-                    <title>Suspended: ${safeTitle}</title>
-                    <style>
-                        body { 
-                            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-                            background: #f5f5f5; 
-                            padding: 40px; 
-                            text-align: center; 
-                            color: #666;
-                        }
-                        .container {
-                            max-width: 400px;
-                            margin: 0 auto;
-                            background: white;
-                            padding: 40px;
-                            border-radius: 8px;
-                            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-                        }
-                        .icon { font-size: 48px; margin-bottom: 20px; }
-                        h1 { color: #333; font-size: 20px; margin-bottom: 10px; }
-                        .url { font-size: 12px; color: #999; word-break: break-all; margin-bottom: 20px; }
-                        button {
-                            background: #2196F3;
-                            color: white;
-                            border: none;
-                            padding: 12px 24px;
-                            border-radius: 6px;
-                            cursor: pointer;
-                            font-size: 14px;
-                        }
-                        button:hover { background: #1976D2; }
-                    </style>
-                </head>
-                <body>
-                    <div class="container">
-                        <div class="icon">😴</div>
-                        <h1>Tab Suspended</h1>
-                        <p>This tab was suspended by FastBrowse to save memory.</p>
-                        <div class="url">${safeUrl}</div>
-                        <button onclick="window.location.href='${safeUrl}'">Restore Tab</button>
-                    </div>
-                </body>
-                </html>
-            `;
-            
-            const dataURL = 'data:text/html;charset=utf-8,' + encodeURIComponent(suspendPageHTML);
-            
-            // Navigate tab to suspend page
-            await chrome.tabs.update(tabId, { url: dataURL });
-            
-            console.log(`✓ Tab ${tabId} suspended using alternative method`);
+            const suspendedUrl = chrome.runtime.getURL('src/suspended.html') +
+                `?tabId=${encodeURIComponent(String(tabId))}` +
+                `&url=${encodeURIComponent(safeUrl)}` +
+                `&title=${encodeURIComponent(safeTitle)}`;
+
+            // Navigate tab to suspended page
+            await chrome.tabs.update(tabId, { url: suspendedUrl });
+
+            console.log(`✓ Tab ${tabId} suspended using alternative method (suspended.html)`);
             if (this.settings.showNotifications) {
                 this.showNotification(`Tab suspended (alt): ${originalTab.title || 'Unknown'}`);
             }
-            
         } catch (error) {
             // Handle case where tab was closed during the process
             if (error.message && error.message.includes('No tab with id')) {
@@ -768,13 +745,32 @@ class FastBrowse {
     }
     
     async restoreTabFull(tab, options = {}) {
-        if (tab.discarded) {
-            await chrome.tabs.reload(tab.id);
+        try {
+            if (tab.discarded) {
+                await chrome.tabs.reload(tab.id);
+                await this.waitForTabLoad(tab.id, 3000);
+            } else {
+                // If we used alternative suspension (our suspended.html or data URL), navigate back to original
+                const isSuspendedPage = (tab.url || '').startsWith(chrome.runtime.getURL('src/suspended.html')) || (tab.url || '').startsWith('data:text/html');
+                if (isSuspendedPage) {
+                    const rec = this.suspendedTabs.get(tab.id);
+                    if (rec && rec.url) {
+                        await chrome.tabs.update(tab.id, { url: rec.url });
+                        await this.waitForTabLoad(tab.id, 3000);
+                    }
+                }
+            }
+        } catch (_) {
+            // Ignore navigation errors
         }
-        
-        // Wait a bit for tab to load before considering it fully restored
-        if (!options.skipWait) {
-            await this.waitForTabLoad(tab.id, 3000); // 3 second timeout
+
+        // Attempt to restore snapshot state if available
+        if (this.settings.memoryCompressionEnabled) {
+            try {
+                await this.tryRestoreStoredTabState(tab.id);
+            } catch (e) {
+                console.debug('State restore (full) failed:', e);
+            }
         }
     }
     
@@ -807,7 +803,11 @@ class FastBrowse {
                 });
                 
                 console.log(`✓ Lite mode enabled for tab ${tab.id}`);
-                this.restorationStats.memoryOptimized++;
+this.restorationStats.memoryOptimized++;
+                // After enabling lite mode, try restoring minimal state too
+                if (this.settings.memoryCompressionEnabled) {
+                    try { await this.tryRestoreStoredTabState(tab.id); } catch (e) { console.debug('State restore (lite) failed:', e); }
+                }
                 
             } catch (error) {
                 console.warn(`Failed to enable lite mode for tab ${tab.id}:`, error);
@@ -837,6 +837,214 @@ class FastBrowse {
             checkTab();
         });
     }
+
+    // Compute per-tab suspend delay based on tag policies and work hours
+    async computeEffectiveSuspendDelay(tab) {
+        try {
+            let delayMs = this.settings.suspendDelay * 60 * 1000;
+            if (!this.settings.tagsEnabled || !this.settings.tagPolicyEnabled) return delayMs;
+
+            const tags = this.getTabTags(tab.id) || [];
+            const hasTag = (name) => tags.some(t => (t.name || '').toLowerCase().includes(name));
+
+            // Reference: never suspend during work hours
+            if (this.settings.referenceNoSuspendDuringWork && this.isWorkHoursActive() && hasTag('reference')) {
+                return null; // signal to skip timer entirely
+            }
+
+            // Work: longer delay
+            if (hasTag('work')) {
+                const mult = Math.max(1, Number(this.settings.workTagDelayMultiplier || 1));
+                delayMs = Math.round(delayMs * mult);
+            }
+
+            return delayMs;
+        } catch (e) {
+            // On error, fall back to default delay
+            return this.settings.suspendDelay * 60 * 1000;
+        }
+    }
+
+    // Work hours helper based on settings
+    isWorkHoursActive() {
+        try {
+            if (!this.settings.workHoursEnabled) return false;
+            const now = new Date();
+            const day = now.getDay(); // 0=Sun..6=Sat
+            const hours = now.getHours();
+            const workDays = Array.isArray(this.settings.workDays) ? this.settings.workDays : [1,2,3,4,5];
+            if (!workDays.includes(day)) return false;
+            const start = Number(this.settings.workStartHour ?? 9);
+            const end = Number(this.settings.workEndHour ?? 17);
+            if (start === end) return true; // whole-day work window
+            if (start < end) {
+                return hours >= start && hours < end;
+            } else {
+                // Overnight window (e.g., 22 to 6)
+                return hours >= start || hours < end;
+            }
+        } catch (_) {
+            return false;
+        }
+    }
+
+    // ================= Memory Compression Helpers =================
+
+    async captureAndStoreTabState(tab) {
+        if (!tab || !tab.id) return;
+        if (!this.settings.snapshotScroll && !this.settings.snapshotForms) return;
+
+        // Inject snapshot script (idempotent) and request snapshot
+        try {
+            await chrome.scripting.executeScript({
+                target: { tabId: tab.id },
+                files: ['src/content/state-snapshot.js']
+            });
+        } catch (e) {
+            // Ignore injection errors (e.g., restricted pages)
+            throw e;
+        }
+
+        const snapshot = await new Promise((resolve, reject) => {
+            let done = false;
+            const timer = setTimeout(() => {
+                if (!done) reject(new Error('Snapshot timed out'));
+            }, 2000);
+            try {
+                chrome.tabs.sendMessage(tab.id, { action: 'snapshotTabState' }, (response) => {
+                    done = true; clearTimeout(timer);
+                    if (chrome.runtime.lastError) return reject(chrome.runtime.lastError);
+                    if (!response || !response.success) return reject(new Error(response?.error || 'Snapshot failed'));
+                    resolve(response.data);
+                });
+            } catch (err) {
+                clearTimeout(timer);
+                reject(err);
+            }
+        });
+
+        // Filter snapshot per settings
+        const filtered = {
+            url: snapshot.url || tab.url || 'about:blank',
+            title: snapshot.title || tab.title || '',
+            scroll: this.settings.snapshotScroll ? snapshot.scroll : null,
+            forms: this.settings.snapshotForms ? snapshot.forms : [],
+            ts: Date.now()
+        };
+
+        const json = JSON.stringify(filtered);
+        const { algo, b64 } = await this.compressStringToBase64(json, this.settings.memoryCompressionAlgo);
+        const key = this.getTabStateKey(tab.id);
+        await chrome.storage.local.set({ [key]: { algo, b64, meta: { url: filtered.url, ts: filtered.ts } } });
+    }
+
+    getTabStateKey(tabId) { return `fastbrowse_tab_state_${tabId}`; }
+
+    async tryRestoreStoredTabState(tabId) {
+        try {
+            const key = this.getTabStateKey(tabId);
+            const obj = await chrome.storage.local.get([key]);
+            const rec = obj[key];
+            if (!rec || !rec.b64) return false;
+            const json = await this.decompressBase64ToString(rec.b64, rec.algo || 'none');
+            const state = JSON.parse(json);
+            // Inject restore script and send state
+            try {
+                await chrome.scripting.executeScript({ target: { tabId }, files: ['src/content/state-snapshot.js'] });
+            } catch (_) {}
+            await new Promise((resolve, reject) => {
+                let done = false;
+                const timer = setTimeout(() => { if (!done) reject(new Error('Restore timed out')); }, 3000);
+                try {
+                    chrome.tabs.sendMessage(tabId, { action: 'restoreTabState', state }, (response) => {
+                        done = true; clearTimeout(timer);
+                        if (chrome.runtime.lastError) return reject(chrome.runtime.lastError);
+                        if (!response || !response.success) return reject(new Error(response?.error || 'Restore failed'));
+                        resolve(response.data);
+                    });
+                } catch (err) { clearTimeout(timer); reject(err); }
+            });
+            // Cleanup after successful restore
+            await chrome.storage.local.remove([key]);
+            return true;
+        } catch (e) {
+            console.debug('tryRestoreStoredTabState error:', e);
+            return false;
+        }
+    }
+
+    async compressStringToBase64(str, algo = 'gzip') {
+        try {
+            const enc = new TextEncoder();
+            const data = enc.encode(str);
+            if (typeof CompressionStream !== 'undefined' && (algo === 'gzip' || algo === 'deflate')) {
+                const cs = new CompressionStream(algo);
+                const writer = cs.writable.getWriter();
+                await writer.write(data);
+                await writer.close();
+                const compressed = await new Response(cs.readable).arrayBuffer();
+                const b64 = this.uint8ToBase64(new Uint8Array(compressed));
+                return { algo, b64 };
+            } else {
+                // Fallback: store as base64 uncompressed
+                const b64 = this.uint8ToBase64(data);
+                return { algo: 'none', b64 };
+            }
+        } catch (e) {
+            // On error, fallback to uncompressed base64 of original string
+            const b64 = btoa(unescape(encodeURIComponent(str)));
+            return { algo: 'none', b64 };
+        }
+    }
+
+    async decompressBase64ToString(b64, algo = 'none') {
+        try {
+            let bytes;
+            try { bytes = this.base64ToUint8(b64); } catch (_) {
+                // Maybe it's base64 of utf-8 string
+                const str = atob(b64);
+                return decodeURIComponent(escape(str));
+            }
+            if (typeof DecompressionStream !== 'undefined' && (algo === 'gzip' || algo === 'deflate')) {
+                const ds = new DecompressionStream(algo);
+                const writer = ds.writable.getWriter();
+                await writer.write(bytes);
+                await writer.close();
+                const decompressed = await new Response(ds.readable).arrayBuffer();
+                const dec = new TextDecoder();
+                return dec.decode(decompressed);
+            } else if (algo === 'none') {
+                const dec = new TextDecoder();
+                return dec.decode(bytes);
+            } else {
+                // Unknown algo, try to decode as utf-8
+                const dec = new TextDecoder();
+                return dec.decode(bytes);
+            }
+        } catch (e) {
+            // Last resort
+            const str = atob(b64);
+            return decodeURIComponent(escape(str));
+        }
+    }
+
+    uint8ToBase64(uint8) {
+        let binary = '';
+        const chunk = 0x8000;
+        for (let i = 0; i < uint8.length; i += chunk) {
+            binary += String.fromCharCode.apply(null, uint8.subarray(i, i + chunk));
+        }
+        return btoa(binary);
+    }
+
+    base64ToUint8(b64) {
+        const binary = atob(b64);
+        const len = binary.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
+        return bytes;
+    }
+    
     
     async shouldProtectTab(tab) {
         // Protect pinned tabs
@@ -884,6 +1092,16 @@ class FastBrowse {
                 }
             }
         }
+        
+        // Tag-Based Memory Policies: protect Reference tabs during work hours
+        try {
+            if (this.settings.tagsEnabled && this.settings.tagPolicyEnabled && this.settings.referenceNoSuspendDuringWork && this.isWorkHoursActive()) {
+                const tabTags = this.getTabTags(tab.id) || [];
+                if (tabTags.some(t => (t.name || '').toLowerCase().includes('reference'))) {
+                    return true;
+                }
+            }
+        } catch (_) {}
         
         return false;
     }
@@ -3361,6 +3579,20 @@ class FastBrowse {
                     }
                     break;
                     
+                case 'restoreFromSuspended':
+                    try {
+                        const tabId = Number(request.tabId);
+                        const options = {};
+                        if (request.forceMode === 'lite') options.forceMode = 'lite';
+                        else if (request.forceMode === 'full') options.forceMode = 'full';
+                        await this.restoreTab(tabId, options);
+                        sendResponse({ success: true });
+                    } catch (error) {
+                        console.error('Failed to restore from suspended page:', error);
+                        sendResponse({ success: false, error: error.message });
+                    }
+                    break;
+                
                 default:
                     sendResponse({ success: false, error: 'Unknown action' });
             }
