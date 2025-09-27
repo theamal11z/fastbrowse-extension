@@ -29,6 +29,13 @@ class OptionsManager {
             preconnectTopN: document.getElementById('preconnect-top-n'),
             preconnectTopNValue: document.getElementById('preconnect-top-n-value'),
             prefetchOnHoverEnabled: document.getElementById('prefetch-on-hover-enabled'),
+            // GPU Accel elements
+            gpuAccelEnabled: document.getElementById('gpu-accel-enabled'),
+            gpuMode: document.getElementById('gpu-mode'),
+            webglProfile: document.getElementById('webgl-profile'),
+            webglForceHighPerf: document.getElementById('webgl-force-high-perf'),
+            webglAntialias: document.getElementById('webgl-antialias'),
+            webglPreserve: document.getElementById('webgl-preserve'),
             memoryWarnings: document.getElementById('memory-warnings'),
             // Extension monitoring elements
             extensionMonitoring: document.getElementById('extension-monitoring'),
@@ -99,6 +106,7 @@ class OptionsManager {
             copyFlagsBtn: document.getElementById('copy-flags'),
             copyFullCommandBtn: document.getElementById('copy-full-command'),
             flagsCopyStatus: document.getElementById('flags-copy-status'),
+            flagsOsSelect: document.getElementById('flags-os-select'),
             // Context-aware elements
             contextAwareEnabled: document.getElementById('context-aware-enabled'),
             workHoursEnabled: document.getElementById('work-hours-enabled'),
@@ -189,6 +197,17 @@ class OptionsManager {
             this.elements.referenceNoSuspendDuringWork.addEventListener('change', () => this.saveSettings());
         }
         
+        // GPU Accel listeners
+        if (this.elements.gpuAccelEnabled) this.elements.gpuAccelEnabled.addEventListener('change', () => this.saveSettings());
+        if (this.elements.gpuMode) this.elements.gpuMode.addEventListener('change', () => this.saveSettings());
+        if (this.elements.webglProfile) this.elements.webglProfile.addEventListener('change', () => {
+            this.applyWebglPresetToUI(this.elements.webglProfile.value);
+            this.saveSettings();
+        });
+        if (this.elements.webglForceHighPerf) this.elements.webglForceHighPerf.addEventListener('change', () => this.saveSettings());
+        if (this.elements.webglAntialias) this.elements.webglAntialias.addEventListener('change', () => this.saveSettings());
+        if (this.elements.webglPreserve) this.elements.webglPreserve.addEventListener('change', () => this.saveSettings());
+
         // Network optimization range updates
         if (this.elements.maxPrefetchHosts) {
             this.elements.maxPrefetchHosts.addEventListener('input', () => {
@@ -435,6 +454,14 @@ class OptionsManager {
                     this.elements.preconnectTopNValue.textContent = settings.preconnectTopN || 2;
                 }
                 if (this.elements.prefetchOnHoverEnabled) this.elements.prefetchOnHoverEnabled.checked = settings.prefetchOnHoverEnabled !== false;
+
+                // GPU Accel settings
+                if (this.elements.gpuAccelEnabled) this.elements.gpuAccelEnabled.checked = settings.gpuAccelEnabled !== false;
+                if (this.elements.gpuMode) this.elements.gpuMode.value = settings.gpuMode || 'auto';
+                if (this.elements.webglProfile) this.elements.webglProfile.value = settings.webglProfile || 'performance';
+                if (this.elements.webglForceHighPerf) this.elements.webglForceHighPerf.checked = settings.webglForceHighPerf !== false;
+                if (this.elements.webglAntialias) this.elements.webglAntialias.checked = !!settings.webglAntialias;
+                if (this.elements.webglPreserve) this.elements.webglPreserve.checked = !!settings.webglPreserveDrawingBuffer;
                 
                 // Memory compression settings
                 if (this.elements.memoryCompressionEnabled) {
@@ -591,6 +618,13 @@ class OptionsManager {
                 preconnectEnabled: this.elements.preconnectEnabled ? this.elements.preconnectEnabled.checked : true,
                 preconnectTopN: this.elements.preconnectTopN ? parseInt(this.elements.preconnectTopN.value) : 2,
                 prefetchOnHoverEnabled: this.elements.prefetchOnHoverEnabled ? this.elements.prefetchOnHoverEnabled.checked : true,
+                // GPU Accel
+                gpuAccelEnabled: this.elements.gpuAccelEnabled ? this.elements.gpuAccelEnabled.checked : true,
+                gpuMode: this.elements.gpuMode ? this.elements.gpuMode.value : 'auto',
+                webglProfile: this.elements.webglProfile ? this.elements.webglProfile.value : 'performance',
+                webglForceHighPerf: this.elements.webglForceHighPerf ? this.elements.webglForceHighPerf.checked : true,
+                webglAntialias: this.elements.webglAntialias ? this.elements.webglAntialias.checked : false,
+                webglPreserveDrawingBuffer: this.elements.webglPreserve ? this.elements.webglPreserve.checked : false,
                 // Memory compression
                 memoryCompressionEnabled: this.elements.memoryCompressionEnabled ? this.elements.memoryCompressionEnabled.checked : true,
                 snapshotScroll: this.elements.snapshotScroll ? this.elements.snapshotScroll.checked : true,
@@ -833,6 +867,24 @@ class OptionsManager {
         }
     }
 
+    applyWebglPresetToUI(profile) {
+        try {
+            if (!this.elements.webglAntialias || !this.elements.webglPreserve) return;
+            const p = profile || (this.elements.webglProfile ? this.elements.webglProfile.value : 'performance');
+            if (p === 'performance') {
+                this.elements.webglAntialias.checked = false;
+                this.elements.webglPreserve.checked = false;
+            } else if (p === 'quality') {
+                this.elements.webglAntialias.checked = true;
+                this.elements.webglPreserve.checked = true;
+            } else {
+                // compatibility: minimal
+                this.elements.webglAntialias.checked = false;
+                this.elements.webglPreserve.checked = false;
+            }
+        } catch (_) {}
+    }
+
     // Compose flags string and copy to clipboard
     buildFlagsString() {
         const parts = [];
@@ -849,13 +901,19 @@ class OptionsManager {
     }
 
     async copyFlags(fullCommand = false) {
+        // Build OS-specific example command
+        const os = this.elements.flagsOsSelect ? this.elements.flagsOsSelect.value : 'linux';
         try {
             const flags = this.buildFlagsString();
-            const platform = 'linux'; // Options UI context; provide Linux example by default
             let text = flags;
             if (fullCommand) {
-                const binary = 'google-chrome'; // common on Ubuntu; user may adjust
-                text = `${binary} ${flags}`.trim();
+                let binary = 'google-chrome';
+                if (os === 'windows') {
+                    binary = '"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"';
+                } else if (os === 'mac') {
+                    binary = '"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"';
+                } // linux default
+                text = `${binary}${flags ? ' ' + flags : ''}`.trim();
             }
             if (!text) {
                 this.showStatus('No flags selected', 'error');

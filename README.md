@@ -40,6 +40,10 @@ FastBrowse is a powerful Chrome extension designed to minimize browser memory co
 - **In-Popup Settings Panel**: Open via the ⚙️ in the header or Tags section; includes Focus Music, smart memory controls, and tag toggles
 - **Non-blocking Toasts**: Friendly, unobtrusive success/error feedback
 - **Chrome Flags Management**: Guided, safe recommendations with copy-to-clipboard launch flags and stability warnings (extensions cannot auto-set flags)
+  - Examples:
+    - Linux: `google-chrome --enable-gpu-rasterization --enable-features=ParallelDownloading`
+    - Windows: `"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" --enable-gpu-rasterization --enable-features=ParallelDownloading`
+    - macOS: `"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --enable-gpu-rasterization --enable-features=ParallelDownloading`
 - **Configurable Settings**: Fully customizable behavior for all features
 
 ### 🏷️ Tag System & Auto Grouping
@@ -299,7 +303,7 @@ Settings (Options → Network Optimization):
 
 1. **Lazy Loading Override**
    - Forces lazy loading for images/iframes outside the initial viewport
-   - Sets `decoding="async"` for images and `preload="metadata"` for below-the-fold videos
+   - Sets `decoding=\"async\"` for images and `preload=\"metadata\"` for below-the-fold videos
 2. **Render-Blocking CSS Optimizer**
    - Heuristically defers non-critical stylesheets (cross-origin or known non-critical providers)
    - Uses `rel=preload as=style` and sets back to `rel=stylesheet` on load
@@ -313,6 +317,21 @@ Settings (Options → Page Load Acceleration):
 - Lazy Loading Override toggle
 - CSS Defer: toggle + max stylesheets
 - JavaScript Deferral: toggle + mode (Safe/Aggressive)
+
+### GPU Acceleration Control
+
+1. **Hardware Acceleration Tuner**
+   - Modes: Auto (recommended), Conservative, Balanced, Aggressive
+   - Provides future hooks for GPU compositing hints; kept conservative by default to avoid regressions
+2. **WebGL Performance Profiles**
+   - Performance: favors speed (disable antialias, no preserveDrawingBuffer, powerPreference="high-performance")
+   - Quality: favors visuals (enable antialias, preserveDrawingBuffer)
+   - Compatibility: minimal changes
+
+Settings (Options → GPU Acceleration Control):
+- Enable GPU Acceleration Control
+- Hardware Acceleration mode
+- WebGL Profile + toggles (Force high-performance GPU, Antialias, Preserve drawing buffer)
 
 ## 🔧 Development
 

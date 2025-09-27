@@ -5,6 +5,13 @@ class FastBrowse {
     constructor() {
 this.settings = {
             autoSuspend: true,
+            // GPU Acceleration Control
+            gpuAccelEnabled: true,
+            gpuMode: 'auto', // 'auto' | 'conservative' | 'balanced' | 'aggressive'
+            webglProfile: 'performance', // 'performance' | 'quality' | 'compatibility'
+            webglForceHighPerf: true,
+            webglAntialias: false,
+            webglPreserveDrawingBuffer: false,
             // Chrome Flags Management (informational only; extensions cannot set flags)
             flagsManagerEnabled: true,
             flagsEnableGpuRasterization: false,
@@ -296,6 +303,17 @@ this.settings = {
                 if (changeInfo.status === 'loading' && this.settings.pageAccelEnabled) {
                     if (tab && tab.url && tab.url.startsWith('http')) {
                         const args = { target: { tabId }, files: ['src/content/page-acceleration.js'] };
+                        try { args.injectImmediately = true; } catch (_) {}
+                        chrome.scripting.executeScript(args).catch(() => {});
+                    }
+                }
+            } catch (_) {}
+
+            // Inject GPU acceleration controls early during loading
+            try {
+                if (changeInfo.status === 'loading' && this.settings.gpuAccelEnabled) {
+                    if (tab && tab.url && tab.url.startsWith('http')) {
+                        const args = { target: { tabId }, files: ['src/content/gpu-accel.js'] };
                         try { args.injectImmediately = true; } catch (_) {}
                         chrome.scripting.executeScript(args).catch(() => {});
                     }
