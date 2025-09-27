@@ -159,6 +159,7 @@ this.settings = {
         
         // Tag management data structures
         this.tags = new Map(); // tagId -> tag object
+        this._updatingContextMenus = false;
         this.tabTags = new Map(); // tabId -> Set of tagIds
         this.tagGroups = new Map(); // groupId -> group object
         this.tagUsageHistory = new Map(); // tagId -> usage history
@@ -3827,6 +3828,10 @@ this.restorationStats.memoryOptimized++;
     
     async updateContextMenuTags() {
         try {
+            if (this._updatingContextMenus) {
+                return; // prevent concurrent updates
+            }
+            this._updatingContextMenus = true;
             const frequentTags = this.getFrequentTags().slice(0, 5); // Top 5 frequent tags
             
             // Remove existing tag items using callback-based approach to avoid errors
@@ -3855,25 +3860,28 @@ this.restorationStats.memoryOptimized++;
             await new Promise(resolve => setTimeout(resolve, 50));
             
             if (frequentTags.length > 0) {
-                chrome.contextMenus.create({
+                await this.createContextMenuSafe({
                     id: 'assign-tag-separator',
                     parentId: 'fastbrowse-tags',
                     type: 'separator',
                     contexts: ['page', 'action']
                 });
                 
-                frequentTags.forEach((tag, index) => {
-                    chrome.contextMenus.create({
+                for (let index = 0; index < frequentTags.length; index++) {
+                    const tag = frequentTags[index];
+                    await this.createContextMenuSafe({
                         id: `assign-tag-${index}`,
                         parentId: 'fastbrowse-tags',
                         title: `📌 Assign "${tag.name}"`,
                         contexts: ['page', 'action']
                     });
-                });
+                }
             }
             
         } catch (error) {
             console.error('Failed to update context menu tags:', error);
+        } finally {
+            this._updatingContextMenus = false;
         }
     }
     
@@ -3954,6 +3962,26 @@ this.restorationStats.memoryOptimized++;
         } catch (error) {
             console.debug('Alarm handler failed:', error);
         }
+    }
+
+    // Safe wrapper for creating context menu items (ignores duplicate id errors)
+    async createContextMenuSafe(options) {
+        return new Promise((resolve) => {
+            try {
+                chrome.contextMenus.create(options, () => {
+                    if (chrome.runtime.lastError) {
+                        // Duplicate IDs or other benign errors can be ignored
+                        const msg = chrome.runtime.lastError.message || '';
+                        if (!/Cannot create item with duplicate id/i.test(msg)) {
+                            console.debug('Context menu create warning:', msg);
+                        }
+                    }
+                    resolve();
+                });
+            } catch (e) {
+                resolve();
+            }
+        });
     }
     
     // Quick tag the current tab with suggestions
