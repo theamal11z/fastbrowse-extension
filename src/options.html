@@ -489,6 +489,50 @@
     </div>
     
     <div class="section">
+        <h2>⚡ Page Load Acceleration</h2>
+
+        <label>
+            <input type="checkbox" id="page-accel-enabled">
+            Enable page load acceleration
+        </label>
+        <div class="description">Faster page loads via lazy loading override, CSS deferral, and JS deferral</div>
+
+        <div class="subsection" style="margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 6px;">
+            <h3 style="margin: 0 0 15px 0; font-size: 16px; color: #333;">Lazy Loading Override</h3>
+            <label>
+                <input type="checkbox" id="lazy-override-enabled">
+                Force lazy loading for images/iframes beyond initial viewport, and optimize videos
+            </label>
+        </div>
+
+        <div class="subsection" style="margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 6px;">
+            <h3 style="margin: 0 0 15px 0; font-size: 16px; color: #333;">Render-Blocking CSS Optimizer</h3>
+            <label>
+                <input type="checkbox" id="css-defer-enabled">
+                Defer non-critical stylesheets (heuristic, limited)
+            </label>
+            <label>Max stylesheets to defer:</label>
+            <div class="range-container">
+                <input type="range" id="css-defer-max" min="0" max="5" value="2">
+                <span class="range-value" id="css-defer-max-value">2</span>
+            </div>
+        </div>
+
+        <div class="subsection" style="margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 6px;">
+            <h3 style="margin: 0 0 15px 0; font-size: 16px; color: #333;">JavaScript Deferral</h3>
+            <label>
+                <input type="checkbox" id="js-deferral-enabled">
+                Defer non-essential scripts (known analytics/ads providers)
+            </label>
+            <label>Deferral mode:</label>
+            <select id="js-deferral-mode" style="padding: 6px; border: 1px solid #ddd; border-radius: 4px; width: 200px;">
+                <option value="safe">Safe (known non-essential)</option>
+                <option value="aggressive">Aggressive (cross-origin)</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="section">
         <h2>🧠 Context-Aware Distraction Removal</h2>
         
         <label>

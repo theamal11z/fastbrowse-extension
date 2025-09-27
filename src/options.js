@@ -83,6 +83,14 @@ class OptionsManager {
             liteRestoredCount: document.getElementById('lite-restored-count'),
             memoryOptimizedCount: document.getElementById('memory-optimized-count'),
             lastRestorationTime: document.getElementById('last-restoration-time'),
+            // Page Acceleration elements
+            pageAccelEnabled: document.getElementById('page-accel-enabled'),
+            lazyOverrideEnabled: document.getElementById('lazy-override-enabled'),
+            cssDeferEnabled: document.getElementById('css-defer-enabled'),
+            cssDeferMax: document.getElementById('css-defer-max'),
+            cssDeferMaxValue: document.getElementById('css-defer-max-value'),
+            jsDeferralEnabled: document.getElementById('js-deferral-enabled'),
+            jsDeferralMode: document.getElementById('js-deferral-mode'),
             // Context-aware elements
             contextAwareEnabled: document.getElementById('context-aware-enabled'),
             workHoursEnabled: document.getElementById('work-hours-enabled'),
@@ -237,6 +245,19 @@ class OptionsManager {
         if (this.elements.memoryCompressionAlgo) {
             this.elements.memoryCompressionAlgo.addEventListener('change', () => this.saveSettings());
         }
+        
+        // Page Acceleration listeners
+        if (this.elements.pageAccelEnabled) this.elements.pageAccelEnabled.addEventListener('change', () => this.saveSettings());
+        if (this.elements.lazyOverrideEnabled) this.elements.lazyOverrideEnabled.addEventListener('change', () => this.saveSettings());
+        if (this.elements.cssDeferEnabled) this.elements.cssDeferEnabled.addEventListener('change', () => this.saveSettings());
+        if (this.elements.cssDeferMax) {
+            this.elements.cssDeferMax.addEventListener('input', () => {
+                this.elements.cssDeferMaxValue.textContent = this.elements.cssDeferMax.value;
+            });
+            this.elements.cssDeferMax.addEventListener('change', () => this.saveSettings());
+        }
+        if (this.elements.jsDeferralEnabled) this.elements.jsDeferralEnabled.addEventListener('change', () => this.saveSettings());
+        if (this.elements.jsDeferralMode) this.elements.jsDeferralMode.addEventListener('change', () => this.saveSettings());
         
         // Save button
         this.elements.saveButton.addEventListener('click', () => {
@@ -413,6 +434,17 @@ class OptionsManager {
                     this.elements.memoryCompressionAlgo.value = settings.memoryCompressionAlgo || 'gzip';
                 }
                 
+                // Page Acceleration
+                if (this.elements.pageAccelEnabled) this.elements.pageAccelEnabled.checked = settings.pageAccelEnabled !== false;
+                if (this.elements.lazyOverrideEnabled) this.elements.lazyOverrideEnabled.checked = settings.lazyOverrideEnabled !== false;
+                if (this.elements.cssDeferEnabled) this.elements.cssDeferEnabled.checked = settings.cssDeferEnabled || false;
+                if (this.elements.cssDeferMax) {
+                    this.elements.cssDeferMax.value = settings.cssDeferMax || 2;
+                    this.elements.cssDeferMaxValue.textContent = settings.cssDeferMax || 2;
+                }
+                if (this.elements.jsDeferralEnabled) this.elements.jsDeferralEnabled.checked = settings.jsDeferralEnabled || false;
+                if (this.elements.jsDeferralMode) this.elements.jsDeferralMode.value = settings.jsDeferralMode || 'safe';
+                
                 // Extension monitoring settings
                 this.elements.extensionMonitoring.checked = settings.extensionMonitoring;
                 this.elements.extensionMemoryThreshold.value = settings.extensionMemoryThreshold;
@@ -518,6 +550,13 @@ class OptionsManager {
                 protectForms: this.elements.protectForms.checked,
                 showNotifications: this.elements.showNotifications.checked,
                 memoryWarnings: this.elements.memoryWarnings.checked,
+                // Page Acceleration
+                pageAccelEnabled: this.elements.pageAccelEnabled ? this.elements.pageAccelEnabled.checked : true,
+                lazyOverrideEnabled: this.elements.lazyOverrideEnabled ? this.elements.lazyOverrideEnabled.checked : true,
+                cssDeferEnabled: this.elements.cssDeferEnabled ? this.elements.cssDeferEnabled.checked : false,
+                cssDeferMax: this.elements.cssDeferMax ? parseInt(this.elements.cssDeferMax.value) : 2,
+                jsDeferralEnabled: this.elements.jsDeferralEnabled ? this.elements.jsDeferralEnabled.checked : false,
+                jsDeferralMode: this.elements.jsDeferralMode ? this.elements.jsDeferralMode.value : 'safe',
                 // Network optimization
                 networkOptimizationEnabled: this.elements.networkOptimizationEnabled ? this.elements.networkOptimizationEnabled.checked : true,
                 dnsPrefetchEnabled: this.elements.dnsPrefetchEnabled ? this.elements.dnsPrefetchEnabled.checked : true,

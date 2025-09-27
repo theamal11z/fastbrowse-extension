@@ -5,6 +5,13 @@ class FastBrowse {
     constructor() {
 this.settings = {
             autoSuspend: true,
+            // Page Load Acceleration
+            pageAccelEnabled: true,
+            lazyOverrideEnabled: true,
+            cssDeferEnabled: false,
+            jsDeferralEnabled: false,
+            cssDeferMax: 2, // number of stylesheets to defer (non-critical heuristic)
+            jsDeferralMode: 'safe', // 'safe' (3rd-party, analytics) | 'aggressive'
             // Network Optimization
             networkOptimizationEnabled: true,
             dnsPrefetchEnabled: true,
@@ -278,6 +285,18 @@ this.settings = {
         // Listen for tab updates
         chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
             this.onTabUpdated(tabId, changeInfo, tab);
+
+            // Inject page acceleration early during loading
+            try {
+                if (changeInfo.status === 'loading' && this.settings.pageAccelEnabled) {
+                    if (tab && tab.url && tab.url.startsWith('http')) {
+                        const args = { target: { tabId }, files: ['src/content/page-acceleration.js'] };
+                        try { args.injectImmediately = true; } catch (_) {}
+                        chrome.scripting.executeScript(args).catch(() => {});
+                    }
+                }
+            } catch (_) {}
+
             // Inject network optimization script on completed loads
             try {
                 if (changeInfo.status === 'complete' && this.settings.networkOptimizationEnabled) {

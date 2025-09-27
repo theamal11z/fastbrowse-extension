@@ -294,6 +294,25 @@ Settings (Options → Network Optimization):
 - Connection Pre-warming: toggle + number of top domains
 - Resource Preloading: toggle prefetch on hover
 
+### Page Load Acceleration
+
+1. **Lazy Loading Override**
+   - Forces lazy loading for images/iframes outside the initial viewport
+   - Sets `decoding="async"` for images and `preload="metadata"` for below-the-fold videos
+2. **Render-Blocking CSS Optimizer**
+   - Heuristically defers non-critical stylesheets (cross-origin or known non-critical providers)
+   - Uses `rel=preload as=style` and sets back to `rel=stylesheet` on load
+   - Limit the number with “Max stylesheets to defer” to avoid FOUC
+3. **JavaScript Deferral**
+   - Safely defers known non-essential third-party scripts (analytics/ads). Aggressive mode defers any cross-origin script
+   - Applies to `<script src>` without `async`/`defer`, leaves inline scripts intact
+
+Settings (Options → Page Load Acceleration):
+- Enable Page Load Acceleration
+- Lazy Loading Override toggle
+- CSS Defer: toggle + max stylesheets
+- JavaScript Deferral: toggle + mode (Safe/Aggressive)
+
 ## 🔧 Development
 
 ### Prerequisites
