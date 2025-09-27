@@ -39,6 +39,7 @@ FastBrowse is a powerful Chrome extension designed to minimize browser memory co
 - **Auto-Group Tabs button**: One-click analysis to suggest tab groups by domain, tags, usage, or time patterns
 - **In-Popup Settings Panel**: Open via the ⚙️ in the header or Tags section; includes Focus Music, smart memory controls, and tag toggles
 - **Non-blocking Toasts**: Friendly, unobtrusive success/error feedback
+- **Chrome Flags Management**: Guided, safe recommendations with copy-to-clipboard launch flags and stability warnings (extensions cannot auto-set flags)
 - **Configurable Settings**: Fully customizable behavior for all features
 
 ### 🏷️ Tag System & Auto Grouping
@@ -419,6 +420,7 @@ Use Chrome Task Manager (`Shift+Esc`) to monitor:
 - **Background Script Persistence**: Service worker may need to restart, causing brief delays
 - **State Snapshot Scope**: Snapshot/restore cannot run on restricted pages (chrome://, chrome-extension://, etc.) and won’t store state for those tabs
 - **Form State Coverage**: Only non-sensitive inputs are captured (password/hidden excluded); complex web app state outside standard form fields isn’t captured
+- **Chrome Flags**: Extensions cannot programmatically modify chrome://flags. Use the Flags Management section to get safe recommendations and copy launch flags.
 
 ## 🔒 Privacy & Security
 

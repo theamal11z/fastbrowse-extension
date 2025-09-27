@@ -5,6 +5,11 @@ class FastBrowse {
     constructor() {
 this.settings = {
             autoSuspend: true,
+            // Chrome Flags Management (informational only; extensions cannot set flags)
+            flagsManagerEnabled: true,
+            flagsEnableGpuRasterization: false,
+            flagsEnableParallelDownloading: false,
+            flagsExperimentalToggle: false,
             // Page Load Acceleration
             pageAccelEnabled: true,
             lazyOverrideEnabled: true,

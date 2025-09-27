@@ -489,6 +489,54 @@
     </div>
     
     <div class="section">
+        <h2>🚩 Chrome Flags Management</h2>
+
+        <div class="description">Extensions cannot change chrome://flags automatically. This tool helps you choose safe flags and copy a launch command.</div>
+
+        <label>
+            <input type="checkbox" id="flags-manager-enabled">
+            Enable flags guidance in FastBrowse
+        </label>
+
+        <div class="subsection" style="margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 6px;">
+            <h3 style="margin: 0 0 12px 0; font-size: 16px; color: #333;">Recommended Safe Performance Flags</h3>
+            <label style="display: flex; align-items: center; gap: 8px;">
+                <input type="checkbox" id="flag-gpu-rasterization">
+                Enable GPU Rasterization <span style="font-size: 12px; color: #4caf50;">(Safe)</span>
+            </label>
+            <div class="description">Offloads rasterization to GPU for smoother rendering on supported systems.</div>
+
+            <label style="display: flex; align-items: center; gap: 8px; margin-top: 8px;">
+                <input type="checkbox" id="flag-parallel-downloading">
+                Parallel Downloading <span style="font-size: 12px; color: #4caf50;">(Safe)</span>
+            </label>
+            <div class="description">Accelerates downloads by splitting files into parallel connections.</div>
+        </div>
+
+        <div class="subsection" style="margin: 20px 0; padding: 15px; background: #fff7e6; border-radius: 6px; border-left: 4px solid #ff9800;">
+            <h3 style="margin: 0 0 12px 0; font-size: 16px; color: #333;">Experimental Features Toggle</h3>
+            <label>
+                <input type="checkbox" id="flags-experimental-toggle">
+                Show experimental suggestions <span style="font-size: 12px; color: #ff9800;">(Use with caution)</span>
+            </label>
+            <div class="description">These may improve performance but can break sites or reduce stability. FastBrowse will label risk levels.</div>
+        </div>
+
+        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+            <button id="copy-flags">Copy launch flags</button>
+            <button id="copy-full-command" class="secondary">Copy full command</button>
+            <span id="flags-copy-status" class="save-status"></span>
+        </div>
+        <div class="description" style="margin-top: 8px;">
+            Paste the flags into your Chrome launch command or desktop shortcut. On Linux (Ubuntu), the binary is often <code>google-chrome</code> or <code>chromium</code>.
+        </div>
+
+        <div class="description" style="margin-top: 8px; color: #777;">
+            Tip: Type <code>chrome://flags</code> in the address bar to manage flags manually. Extensions cannot navigate to or modify this page.
+        </div>
+    </div>
+
+    <div class="section">
         <h2>⚡ Page Load Acceleration</h2>
 
         <label>

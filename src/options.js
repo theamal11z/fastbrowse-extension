@@ -91,6 +91,14 @@ class OptionsManager {
             cssDeferMaxValue: document.getElementById('css-defer-max-value'),
             jsDeferralEnabled: document.getElementById('js-deferral-enabled'),
             jsDeferralMode: document.getElementById('js-deferral-mode'),
+            // Chrome Flags Manager
+            flagsManagerEnabled: document.getElementById('flags-manager-enabled'),
+            flagGpuRasterization: document.getElementById('flag-gpu-rasterization'),
+            flagParallelDownloading: document.getElementById('flag-parallel-downloading'),
+            flagsExperimentalToggle: document.getElementById('flags-experimental-toggle'),
+            copyFlagsBtn: document.getElementById('copy-flags'),
+            copyFullCommandBtn: document.getElementById('copy-full-command'),
+            flagsCopyStatus: document.getElementById('flags-copy-status'),
             // Context-aware elements
             contextAwareEnabled: document.getElementById('context-aware-enabled'),
             workHoursEnabled: document.getElementById('work-hours-enabled'),
@@ -246,6 +254,14 @@ class OptionsManager {
             this.elements.memoryCompressionAlgo.addEventListener('change', () => this.saveSettings());
         }
         
+        // Flags Manager listeners
+        if (this.elements.flagsManagerEnabled) this.elements.flagsManagerEnabled.addEventListener('change', () => this.saveSettings());
+        if (this.elements.flagGpuRasterization) this.elements.flagGpuRasterization.addEventListener('change', () => this.saveSettings());
+        if (this.elements.flagParallelDownloading) this.elements.flagParallelDownloading.addEventListener('change', () => this.saveSettings());
+        if (this.elements.flagsExperimentalToggle) this.elements.flagsExperimentalToggle.addEventListener('change', () => this.saveSettings());
+        if (this.elements.copyFlagsBtn) this.elements.copyFlagsBtn.addEventListener('click', () => this.copyFlags(false));
+        if (this.elements.copyFullCommandBtn) this.elements.copyFullCommandBtn.addEventListener('click', () => this.copyFlags(true));
+
         // Page Acceleration listeners
         if (this.elements.pageAccelEnabled) this.elements.pageAccelEnabled.addEventListener('change', () => this.saveSettings());
         if (this.elements.lazyOverrideEnabled) this.elements.lazyOverrideEnabled.addEventListener('change', () => this.saveSettings());
@@ -444,6 +460,12 @@ class OptionsManager {
                 }
                 if (this.elements.jsDeferralEnabled) this.elements.jsDeferralEnabled.checked = settings.jsDeferralEnabled || false;
                 if (this.elements.jsDeferralMode) this.elements.jsDeferralMode.value = settings.jsDeferralMode || 'safe';
+
+                // Flags Manager
+                if (this.elements.flagsManagerEnabled) this.elements.flagsManagerEnabled.checked = settings.flagsManagerEnabled !== false;
+                if (this.elements.flagGpuRasterization) this.elements.flagGpuRasterization.checked = !!settings.flagsEnableGpuRasterization;
+                if (this.elements.flagParallelDownloading) this.elements.flagParallelDownloading.checked = !!settings.flagsEnableParallelDownloading;
+                if (this.elements.flagsExperimentalToggle) this.elements.flagsExperimentalToggle.checked = !!settings.flagsExperimentalToggle;
                 
                 // Extension monitoring settings
                 this.elements.extensionMonitoring.checked = settings.extensionMonitoring;
@@ -557,6 +579,11 @@ class OptionsManager {
                 cssDeferMax: this.elements.cssDeferMax ? parseInt(this.elements.cssDeferMax.value) : 2,
                 jsDeferralEnabled: this.elements.jsDeferralEnabled ? this.elements.jsDeferralEnabled.checked : false,
                 jsDeferralMode: this.elements.jsDeferralMode ? this.elements.jsDeferralMode.value : 'safe',
+                // Flags Manager
+                flagsManagerEnabled: this.elements.flagsManagerEnabled ? this.elements.flagsManagerEnabled.checked : true,
+                flagsEnableGpuRasterization: this.elements.flagGpuRasterization ? this.elements.flagGpuRasterization.checked : false,
+                flagsEnableParallelDownloading: this.elements.flagParallelDownloading ? this.elements.flagParallelDownloading.checked : false,
+                flagsExperimentalToggle: this.elements.flagsExperimentalToggle ? this.elements.flagsExperimentalToggle.checked : false,
                 // Network optimization
                 networkOptimizationEnabled: this.elements.networkOptimizationEnabled ? this.elements.networkOptimizationEnabled.checked : true,
                 dnsPrefetchEnabled: this.elements.dnsPrefetchEnabled ? this.elements.dnsPrefetchEnabled.checked : true,
@@ -803,6 +830,44 @@ class OptionsManager {
             if (this.elements.lastContextCheck) {
                 this.elements.lastContextCheck.textContent = 'Never';
             }
+        }
+    }
+
+    // Compose flags string and copy to clipboard
+    buildFlagsString() {
+        const parts = [];
+        try {
+            if (this.elements.flagGpuRasterization && this.elements.flagGpuRasterization.checked) {
+                parts.push('--enable-gpu-rasterization');
+            }
+            if (this.elements.flagParallelDownloading && this.elements.flagParallelDownloading.checked) {
+                parts.push('--enable-features=ParallelDownloading');
+            }
+            // Experimental suggestions can be added here when toggled; keeping minimal and safe by default
+        } catch (_) {}
+        return parts.join(' ');
+    }
+
+    async copyFlags(fullCommand = false) {
+        try {
+            const flags = this.buildFlagsString();
+            const platform = 'linux'; // Options UI context; provide Linux example by default
+            let text = flags;
+            if (fullCommand) {
+                const binary = 'google-chrome'; // common on Ubuntu; user may adjust
+                text = `${binary} ${flags}`.trim();
+            }
+            if (!text) {
+                this.showStatus('No flags selected', 'error');
+                return;
+            }
+            await navigator.clipboard.writeText(text);
+            if (this.elements.flagsCopyStatus) {
+                this.elements.flagsCopyStatus.textContent = 'Copied!';
+                setTimeout(() => { this.elements.flagsCopyStatus.textContent = ''; }, 2000);
+            }
+        } catch (e) {
+            this.showStatus('Copy failed', 'error');
         }
     }
     
