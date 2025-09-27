@@ -604,6 +604,28 @@
     </div>
     
     <div class="section">
+        <h2>⚡ Quick Session Switching</h2>
+
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+            <label style="display:flex; align-items:center; gap:6px;">
+                <input type="checkbox" id="turbo-mode-toggle"> Turbo Mode
+            </label>
+            <label style="display:flex; align-items:center; gap:6px;">
+                Preset:
+                <select id="performance-preset" style="padding:6px; border:1px solid #ddd; border-radius:4px;">
+                    <option value="browsing" selected>Browsing</option>
+                    <option value="gaming">Gaming</option>
+                    <option value="streaming">Streaming</option>
+                </select>
+            </label>
+            <button id="apply-preset">Apply Preset</button>
+            <button id="one-click-optimize" class="secondary">One‑Click Optimize</button>
+            <span id="quick-session-status" class="save-status"></span>
+        </div>
+        <div class="description" style="margin-top:6px;">Turbo Mode temporarily disables non‑essential features for maximum speed. Presets quickly tune network/GPU/restore settings for common scenarios.</div>
+    </div>
+
+    <div class="section">
         <h2>🧩 Bottleneck Identification</h2>
 
         <label>

@@ -143,6 +143,12 @@ class OptionsManager {
             memoryLeakLookbackValue: document.getElementById('memory-leak-lookback-value'),
             memoryLeakSlope: document.getElementById('memory-leak-slope'),
             memoryLeakSlopeValue: document.getElementById('memory-leak-slope-value'),
+            // Quick Session Switching
+            turboModeToggle: document.getElementById('turbo-mode-toggle'),
+            performancePreset: document.getElementById('performance-preset'),
+            applyPresetBtn: document.getElementById('apply-preset'),
+            oneClickOptimizeBtn: document.getElementById('one-click-optimize'),
+            quickSessionStatus: document.getElementById('quick-session-status'),
             copyFlagsBtn: document.getElementById('copy-flags'),
             copyFullCommandBtn: document.getElementById('copy-full-command'),
             flagsCopyStatus: document.getElementById('flags-copy-status'),
@@ -339,9 +345,14 @@ class OptionsManager {
             this.elements.memoryLeakLookback.addEventListener('input', () => this.elements.memoryLeakLookbackValue.textContent = this.elements.memoryLeakLookback.value);
             this.elements.memoryLeakLookback.addEventListener('change', () => this.saveSettings());
         }
-        if (this.elements.memoryLeakSlope) {
-            this.elements.memoryLeakSlope.addEventListener('input', () => this.elements.memoryLeakSlopeValue.textContent = this.elements.memoryLeakSlope.value);
+        if (this.elements.memoryLeakSlope) { this.elements.memoryLeakSlope.addEventListener('input', () => this.elements.memoryLeakSlopeValue.textContent = this.elements.memoryLeakSlope.value);
             this.elements.memoryLeakSlope.addEventListener('change', () => this.saveSettings());
+        }
+
+        // Quick Session Switching listeners
+        if (this.elements.turboModeToggle) this.elements.turboModeToggle.addEventListener('change', () => this.toggleTurbo());
+        if (this.elements.applyPresetBtn) this.elements.applyPresetBtn.addEventListener('click', () => this.applyPreset());
+        if (this.elements.oneClickOptimizeBtn) this.elements.oneClickOptimizeBtn.addEventListener('click', () => this.oneClickOptimize());
         }
 
         // Speed Dashboard listeners
@@ -616,6 +627,10 @@ class OptionsManager {
                 if (this.elements.memoryLeakAlerts) this.elements.memoryLeakAlerts.checked = settings.memoryLeakAlerts !== false;
                 if (this.elements.memoryLeakLookback) { this.elements.memoryLeakLookback.value = settings.memoryLeakLookbackMinutes || 5; this.elements.memoryLeakLookbackValue.textContent = settings.memoryLeakLookbackMinutes || 5; }
                 if (this.elements.memoryLeakSlope) { this.elements.memoryLeakSlope.value = settings.memoryLeakSlopeThreshold || 1.0; this.elements.memoryLeakSlopeValue.textContent = settings.memoryLeakSlopeThreshold || 1.0; }
+
+                // Quick Session Switching
+                if (this.elements.turboModeToggle) this.elements.turboModeToggle.checked = settings.turboMode || false;
+                if (this.elements.performancePreset) this.elements.performancePreset.value = settings.performancePreset || 'browsing';
                 
                 // Extension monitoring settings
                 this.elements.extensionMonitoring.checked = settings.extensionMonitoring;
@@ -1230,6 +1245,53 @@ class OptionsManager {
             if (this.elements.idbOptStatus) {
                 this.elements.idbOptStatus.textContent = 'Failed';
                 setTimeout(()=>{ this.elements.idbOptStatus.textContent=''; }, 2000);
+            }
+        }
+    }
+
+    async toggleTurbo() {
+        try {
+            const enable = !!(this.elements.turboModeToggle && this.elements.turboModeToggle.checked);
+            const resp = await this.sendMessage({ action: 'toggleTurboMode', enable });
+            if (this.elements.quickSessionStatus) {
+                this.elements.quickSessionStatus.textContent = enable ? 'Turbo ON' : 'Turbo OFF';
+                setTimeout(()=>{ this.elements.quickSessionStatus.textContent=''; }, 1500);
+            }
+        } catch (e) {
+            if (this.elements.quickSessionStatus) {
+                this.elements.quickSessionStatus.textContent = 'Failed';
+                setTimeout(()=>{ this.elements.quickSessionStatus.textContent=''; }, 2000);
+            }
+        }
+    }
+
+    async applyPreset() {
+        try {
+            const preset = this.elements.performancePreset ? this.elements.performancePreset.value : 'browsing';
+            await this.sendMessage({ action: 'applyPerformancePreset', preset });
+            if (this.elements.quickSessionStatus) {
+                this.elements.quickSessionStatus.textContent = `Applied ${preset}`;
+                setTimeout(()=>{ this.elements.quickSessionStatus.textContent=''; }, 1500);
+            }
+        } catch (e) {
+            if (this.elements.quickSessionStatus) {
+                this.elements.quickSessionStatus.textContent = 'Failed';
+                setTimeout(()=>{ this.elements.quickSessionStatus.textContent=''; }, 2000);
+            }
+        }
+    }
+
+    async oneClickOptimize() {
+        try {
+            await this.sendMessage({ action: 'oneClickOptimize' });
+            if (this.elements.quickSessionStatus) {
+                this.elements.quickSessionStatus.textContent = 'Optimized';
+                setTimeout(()=>{ this.elements.quickSessionStatus.textContent=''; }, 1500);
+            }
+        } catch (e) {
+            if (this.elements.quickSessionStatus) {
+                this.elements.quickSessionStatus.textContent = 'Failed';
+                setTimeout(()=>{ this.elements.quickSessionStatus.textContent=''; }, 2000);
             }
         }
     }

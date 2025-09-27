@@ -5,6 +5,9 @@ class FastBrowse {
     constructor() {
 this.settings = {
             autoSuspend: true,
+            // Quick Session Switching
+            turboMode: false,
+            performancePreset: 'browsing', // 'gaming' | 'streaming' | 'browsing'
             // Profile Optimization
             profileOptimizationEnabled: true,
             idbOptimizeEnabled: true,
@@ -3719,6 +3722,40 @@ this.restorationStats.memoryOptimized++;
                     break;
 
                 // Bottleneck reports
+                case 'toggleTurboMode':
+                    try {
+                        const enable = !!request.enable;
+                        if (enable) {
+                            await this.enableTurboMode();
+                        } else {
+                            await this.disableTurboMode();
+                        }
+                        sendResponse({ success: true, data: { turboMode: this.settings.turboMode } });
+                    } catch (error) {
+                        sendResponse({ success: false, error: error.message });
+                    }
+                    break;
+
+                case 'applyPerformancePreset':
+                    try {
+                        const name = request.preset || 'browsing';
+                        await this.applyPerformancePreset(name);
+                        sendResponse({ success: true, data: { preset: this.settings.performancePreset } });
+                    } catch (error) {
+                        sendResponse({ success: false, error: error.message });
+                    }
+                    break;
+
+                case 'oneClickOptimize':
+                    try {
+                        await this.applyPerformancePreset('browsing');
+                        await this.runIntelligentCacheClear();
+                        sendResponse({ success: true });
+                    } catch (error) {
+                        sendResponse({ success: false, error: error.message });
+                    }
+                    break;
+
                 case 'reportBottlenecks':
                     try {
                         await this.handleBottleneckReport(request.data);
@@ -4095,6 +4132,127 @@ this.restorationStats.memoryOptimized++;
         } catch (e) {
             console.debug('optimizeIndexedDBForRecentOrigins failed', e);
             return 0;
+        }
+    }
+
+    // Quick Session Switching
+    async enableTurboMode() {
+        try {
+            if (this.settings.turboMode) return;
+            // Snapshot current settings
+            await chrome.storage.local.set({ fastbrowse_turbo_snapshot: this.settings });
+            // Apply turbo settings (non-destructive to user data)
+            this.settings.turboMode = true;
+            // Reduce extension overhead, maximize speed
+            this.settings.speedDashboardEnabled = false;
+            this.settings.bottlenecksEnabled = false;
+            this.settings.aggressivePrefetchEnabled = false;
+            this.settings.tagsEnabled = false;
+            this.settings.extensionMonitoring = false;
+            this.settings.extensionSuggestions = false;
+            this.settings.extensionNotifications = false;
+            this.settings.memoryAwareRestoration = true;
+            this.settings.liteRestorationDefault = true;
+            this.settings.prioritizeContentOverMedia = true;
+            this.settings.networkOptimizationEnabled = true;
+            this.settings.dnsPrefetchEnabled = true;
+            this.settings.preconnectEnabled = true;
+            this.settings.prefetchOnHoverEnabled = false;
+            this.settings.gpuAccelEnabled = true;
+            this.settings.gpuMode = 'aggressive';
+            this.settings.webglProfile = 'performance';
+            this.settings.webglForceHighPerf = true;
+            await chrome.storage.sync.set(this.settings);
+            if (this.settings.showNotifications) {
+                this.showNotification('🚀 Turbo Mode enabled');
+            }
+        } catch (e) {
+            console.debug('enableTurboMode failed', e);
+        }
+    }
+
+    async disableTurboMode() {
+        try {
+            if (!this.settings.turboMode) return;
+            const snap = (await chrome.storage.local.get(['fastbrowse_turbo_snapshot'])).fastbrowse_turbo_snapshot;
+            if (snap) {
+                this.settings = { ...this.settings, ...snap, turboMode: false };
+            } else {
+                this.settings.turboMode = false;
+            }
+            await chrome.storage.sync.set(this.settings);
+            if (this.settings.showNotifications) {
+                this.showNotification('🧰 Turbo Mode disabled');
+            }
+        } catch (e) {
+            console.debug('disableTurboMode failed', e);
+        }
+    }
+
+    getPresetSettings(name) {
+        const p = String(name || '').toLowerCase();
+        switch (p) {
+            case 'gaming':
+                return {
+                    performancePreset: 'gaming',
+                    aggressivePrefetchEnabled: false,
+                    networkOptimizationEnabled: true,
+                    dnsPrefetchEnabled: true,
+                    preconnectEnabled: true,
+                    prefetchOnHoverEnabled: false,
+                    memoryAwareRestoration: true,
+                    liteRestorationDefault: true,
+                    prioritizeContentOverMedia: true,
+                    gpuAccelEnabled: true,
+                    gpuMode: 'aggressive',
+                    webglProfile: 'performance',
+                    webglForceHighPerf: true,
+                };
+            case 'streaming':
+                return {
+                    performancePreset: 'streaming',
+                    aggressivePrefetchEnabled: false,
+                    networkOptimizationEnabled: true,
+                    dnsPrefetchEnabled: true,
+                    preconnectEnabled: true,
+                    prefetchOnHoverEnabled: false,
+                    protectAudio: true,
+                    memoryAwareRestoration: true,
+                    liteRestorationDefault: false,
+                    prioritizeContentOverMedia: false,
+                    gpuAccelEnabled: true,
+                    gpuMode: 'balanced',
+                    webglProfile: 'quality',
+                };
+            case 'browsing':
+            default:
+                return {
+                    performancePreset: 'browsing',
+                    aggressivePrefetchEnabled: true,
+                    networkOptimizationEnabled: true,
+                    dnsPrefetchEnabled: true,
+                    preconnectEnabled: true,
+                    prefetchOnHoverEnabled: true,
+                    memoryAwareRestoration: true,
+                    liteRestorationDefault: false,
+                    prioritizeContentOverMedia: true,
+                    gpuAccelEnabled: true,
+                    gpuMode: 'auto',
+                    webglProfile: 'performance',
+                };
+        }
+    }
+
+    async applyPerformancePreset(name) {
+        try {
+            const patch = this.getPresetSettings(name);
+            this.settings = { ...this.settings, ...patch };
+            await chrome.storage.sync.set(this.settings);
+            if (this.settings.showNotifications) {
+                this.showNotification(`⚙️ Applied ${this.settings.performancePreset} preset`);
+            }
+        } catch (e) {
+            console.debug('applyPerformancePreset failed', e);
         }
     }
             
