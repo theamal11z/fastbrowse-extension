@@ -109,6 +109,23 @@ class OptionsManager {
             clearSpeed: document.getElementById('clear-speed'),
             speedStatus: document.getElementById('speed-status'),
             speedList: document.getElementById('speed-dashboard-list'),
+            // Bottlenecks
+            bottlenecksEnabled: document.getElementById('bottlenecks-enabled'),
+            slowResourceDetection: document.getElementById('slow-resource-detection'),
+            slowResourceSizeKb: document.getElementById('slow-resource-size-kb'),
+            slowResourceSizeKbValue: document.getElementById('slow-resource-size-kb-value'),
+            slowResourceDurationMs: document.getElementById('slow-resource-duration-ms'),
+            slowResourceDurationMsValue: document.getElementById('slow-resource-duration-ms-value'),
+            cpuHogWarning: document.getElementById('cpu-hog-warning'),
+            cpuLongTaskWindowMs: document.getElementById('cpu-longtask-window-ms'),
+            cpuLongTaskWindowMsValue: document.getElementById('cpu-longtask-window-ms-value'),
+            cpuLongTaskTotalMs: document.getElementById('cpu-longtask-total-ms'),
+            cpuLongTaskTotalMsValue: document.getElementById('cpu-longtask-total-ms-value'),
+            memoryLeakAlerts: document.getElementById('memory-leak-alerts'),
+            memoryLeakLookback: document.getElementById('memory-leak-lookback'),
+            memoryLeakLookbackValue: document.getElementById('memory-leak-lookback-value'),
+            memoryLeakSlope: document.getElementById('memory-leak-slope'),
+            memoryLeakSlopeValue: document.getElementById('memory-leak-slope-value'),
             copyFlagsBtn: document.getElementById('copy-flags'),
             copyFullCommandBtn: document.getElementById('copy-full-command'),
             flagsCopyStatus: document.getElementById('flags-copy-status'),
@@ -280,6 +297,36 @@ class OptionsManager {
             this.elements.memoryCompressionAlgo.addEventListener('change', () => this.saveSettings());
         }
         
+        // Bottlenecks listeners
+        if (this.elements.bottlenecksEnabled) this.elements.bottlenecksEnabled.addEventListener('change', () => this.saveSettings());
+        if (this.elements.slowResourceDetection) this.elements.slowResourceDetection.addEventListener('change', () => this.saveSettings());
+        if (this.elements.slowResourceSizeKb) {
+            this.elements.slowResourceSizeKb.addEventListener('input', () => this.elements.slowResourceSizeKbValue.textContent = this.elements.slowResourceSizeKb.value);
+            this.elements.slowResourceSizeKb.addEventListener('change', () => this.saveSettings());
+        }
+        if (this.elements.slowResourceDurationMs) {
+            this.elements.slowResourceDurationMs.addEventListener('input', () => this.elements.slowResourceDurationMsValue.textContent = this.elements.slowResourceDurationMs.value);
+            this.elements.slowResourceDurationMs.addEventListener('change', () => this.saveSettings());
+        }
+        if (this.elements.cpuHogWarning) this.elements.cpuHogWarning.addEventListener('change', () => this.saveSettings());
+        if (this.elements.cpuLongTaskWindowMs) {
+            this.elements.cpuLongTaskWindowMs.addEventListener('input', () => this.elements.cpuLongTaskWindowMsValue.textContent = this.elements.cpuLongTaskWindowMs.value);
+            this.elements.cpuLongTaskWindowMs.addEventListener('change', () => this.saveSettings());
+        }
+        if (this.elements.cpuLongTaskTotalMs) {
+            this.elements.cpuLongTaskTotalMs.addEventListener('input', () => this.elements.cpuLongTaskTotalMsValue.textContent = this.elements.cpuLongTaskTotalMs.value);
+            this.elements.cpuLongTaskTotalMs.addEventListener('change', () => this.saveSettings());
+        }
+        if (this.elements.memoryLeakAlerts) this.elements.memoryLeakAlerts.addEventListener('change', () => this.saveSettings());
+        if (this.elements.memoryLeakLookback) {
+            this.elements.memoryLeakLookback.addEventListener('input', () => this.elements.memoryLeakLookbackValue.textContent = this.elements.memoryLeakLookback.value);
+            this.elements.memoryLeakLookback.addEventListener('change', () => this.saveSettings());
+        }
+        if (this.elements.memoryLeakSlope) {
+            this.elements.memoryLeakSlope.addEventListener('input', () => this.elements.memoryLeakSlopeValue.textContent = this.elements.memoryLeakSlope.value);
+            this.elements.memoryLeakSlope.addEventListener('change', () => this.saveSettings());
+        }
+
         // Speed Dashboard listeners
         if (this.elements.speedDashboardEnabled) this.elements.speedDashboardEnabled.addEventListener('change', () => this.saveSettings());
         if (this.elements.refreshSpeed) this.elements.refreshSpeed.addEventListener('click', () => this.loadSpeedDashboard());
@@ -508,6 +555,18 @@ class OptionsManager {
 
                 // Speed Dashboard
                 if (this.elements.speedDashboardEnabled) this.elements.speedDashboardEnabled.checked = settings.speedDashboardEnabled !== false;
+
+                // Bottlenecks
+                if (this.elements.bottlenecksEnabled) this.elements.bottlenecksEnabled.checked = settings.bottlenecksEnabled !== false;
+                if (this.elements.slowResourceDetection) this.elements.slowResourceDetection.checked = settings.slowResourceDetection !== false;
+                if (this.elements.slowResourceSizeKb) { this.elements.slowResourceSizeKb.value = settings.slowResourceSizeKB || 200; this.elements.slowResourceSizeKbValue.textContent = settings.slowResourceSizeKB || 200; }
+                if (this.elements.slowResourceDurationMs) { this.elements.slowResourceDurationMs.value = settings.slowResourceDurationMs || 300; this.elements.slowResourceDurationMsValue.textContent = settings.slowResourceDurationMs || 300; }
+                if (this.elements.cpuHogWarning) this.elements.cpuHogWarning.checked = settings.cpuHogWarning !== false;
+                if (this.elements.cpuLongTaskWindowMs) { this.elements.cpuLongTaskWindowMs.value = settings.cpuLongTaskWindowMs || 10000; this.elements.cpuLongTaskWindowMsValue.textContent = settings.cpuLongTaskWindowMs || 10000; }
+                if (this.elements.cpuLongTaskTotalMs) { this.elements.cpuLongTaskTotalMs.value = settings.cpuLongTaskTotalMsThreshold || 1000; this.elements.cpuLongTaskTotalMsValue.textContent = settings.cpuLongTaskTotalMsThreshold || 1000; }
+                if (this.elements.memoryLeakAlerts) this.elements.memoryLeakAlerts.checked = settings.memoryLeakAlerts !== false;
+                if (this.elements.memoryLeakLookback) { this.elements.memoryLeakLookback.value = settings.memoryLeakLookbackMinutes || 5; this.elements.memoryLeakLookbackValue.textContent = settings.memoryLeakLookbackMinutes || 5; }
+                if (this.elements.memoryLeakSlope) { this.elements.memoryLeakSlope.value = settings.memoryLeakSlopeThreshold || 1.0; this.elements.memoryLeakSlopeValue.textContent = settings.memoryLeakSlopeThreshold || 1.0; }
                 
                 // Extension monitoring settings
                 this.elements.extensionMonitoring.checked = settings.extensionMonitoring;
@@ -621,6 +680,17 @@ class OptionsManager {
                 cssDeferMax: this.elements.cssDeferMax ? parseInt(this.elements.cssDeferMax.value) : 2,
                 jsDeferralEnabled: this.elements.jsDeferralEnabled ? this.elements.jsDeferralEnabled.checked : false,
                 jsDeferralMode: this.elements.jsDeferralMode ? this.elements.jsDeferralMode.value : 'safe',
+                // Bottlenecks
+                bottlenecksEnabled: this.elements.bottlenecksEnabled ? this.elements.bottlenecksEnabled.checked : true,
+                slowResourceDetection: this.elements.slowResourceDetection ? this.elements.slowResourceDetection.checked : true,
+                slowResourceSizeKB: this.elements.slowResourceSizeKb ? parseInt(this.elements.slowResourceSizeKb.value) : 200,
+                slowResourceDurationMs: this.elements.slowResourceDurationMs ? parseInt(this.elements.slowResourceDurationMs.value) : 300,
+                cpuHogWarning: this.elements.cpuHogWarning ? this.elements.cpuHogWarning.checked : true,
+                cpuLongTaskWindowMs: this.elements.cpuLongTaskWindowMs ? parseInt(this.elements.cpuLongTaskWindowMs.value) : 10000,
+                cpuLongTaskTotalMsThreshold: this.elements.cpuLongTaskTotalMs ? parseInt(this.elements.cpuLongTaskTotalMs.value) : 1000,
+                memoryLeakAlerts: this.elements.memoryLeakAlerts ? this.elements.memoryLeakAlerts.checked : true,
+                memoryLeakLookbackMinutes: this.elements.memoryLeakLookback ? parseInt(this.elements.memoryLeakLookback.value) : 5,
+                memoryLeakSlopeThreshold: this.elements.memoryLeakSlope ? parseFloat(this.elements.memoryLeakSlope.value) : 1.0,
                 // Flags Manager
                 flagsManagerEnabled: this.elements.flagsManagerEnabled ? this.elements.flagsManagerEnabled.checked : true,
                 flagsEnableGpuRasterization: this.elements.flagGpuRasterization ? this.elements.flagGpuRasterization.checked : false,
@@ -960,6 +1030,21 @@ class OptionsManager {
                 <div><strong>Load</strong><div>${Math.round(t.loadEventEnd||0)} ms</div></div>
             `;
             wrap.appendChild(grid);
+
+            // Bottleneck summary
+            if (item.bottlenecks) {
+                const bot = document.createElement('div');
+                bot.style.marginTop = '6px';
+                bot.style.fontSize = '12px';
+                bot.style.color = '#555';
+                const parts = [];
+                if (typeof item.bottlenecks.slowCount === 'number') parts.push(`${item.bottlenecks.slowCount} slow 3rd‑party script(s)`);
+                if (typeof item.bottlenecks.cpuLongTaskTotalMs === 'number') parts.push(`Long tasks ${item.bottlenecks.cpuLongTaskTotalMs}ms`);
+                if (parts.length > 0) {
+                    bot.innerHTML = `<strong>Bottlenecks:</strong> ${parts.join(', ')}`;
+                    wrap.appendChild(bot);
+                }
+            }
 
             // Waterfall
             const resources = item.resources || [];

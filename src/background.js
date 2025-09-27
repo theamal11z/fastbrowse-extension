@@ -5,6 +5,17 @@ class FastBrowse {
     constructor() {
 this.settings = {
             autoSuspend: true,
+            // Bottleneck Identification
+            bottlenecksEnabled: true,
+            slowResourceDetection: true,
+            slowResourceSizeKB: 200,
+            slowResourceDurationMs: 300,
+            cpuHogWarning: true,
+            cpuLongTaskWindowMs: 10000,
+            cpuLongTaskTotalMsThreshold: 1000,
+            memoryLeakAlerts: true,
+            memoryLeakSlopeThreshold: 1.0, // % per minute
+            memoryLeakLookbackMinutes: 5,
             // Speed Dashboard
             speedDashboardEnabled: true,
             speedRetainEntries: 50,
@@ -343,6 +354,18 @@ this.settings = {
                         chrome.scripting.executeScript({
                             target: { tabId },
                             files: ['src/content/speed-metrics.js']
+                        }).catch(() => {});
+                    }
+                }
+            } catch (_) {}
+
+            // Inject bottleneck detection on completed loads
+            try {
+                if (changeInfo.status === 'complete' && this.settings.bottlenecksEnabled) {
+                    if (tab && tab.url && tab.url.startsWith('http')) {
+                        chrome.scripting.executeScript({
+                            target: { tabId },
+                            files: ['src/content/bottlenecks.js']
                         }).catch(() => {});
                     }
                 }
@@ -2654,6 +2677,8 @@ this.restorationStats.memoryOptimized++;
         }
         // Spike detection
         this.detectSpikeAndLearn(samples).catch(() => {});
+        // Memory leak alert check (best-effort)
+        this.memoryLeakAlertCheck().catch(() => {});
     }
 
     async preemptiveSuspend() {
@@ -3681,6 +3706,17 @@ this.restorationStats.memoryOptimized++;
                         sendResponse({ success: false, error: error.message });
                     }
                     break;
+
+                // Bottleneck reports
+                case 'reportBottlenecks':
+                    try {
+                        await this.handleBottleneckReport(request.data);
+                        sendResponse({ success: true });
+                    } catch (error) {
+                        console.error('reportBottlenecks failed:', error);
+                        sendResponse({ success: false, error: error.message });
+                    }
+                    break;
                     
                 case 'restoreFromSuspended':
                     try {
@@ -3756,6 +3792,95 @@ this.restorationStats.memoryOptimized++;
             const obj = await chrome.storage.local.get([key]);
             return Array.isArray(obj[key]) ? obj[key] : [];
         } catch (_) { return []; }
+    }
+
+    async handleBottleneckReport(data) {
+        try {
+            if (!this.settings.bottlenecksEnabled) return;
+            const findings = [];
+            const slowSize = (this.settings.slowResourceSizeKB || 200) * 1024;
+            const slowDur = this.settings.slowResourceDurationMs || 300;
+            const trackers = [/googletagmanager\.com/i, /google-analytics\.com/i, /doubleclick\.net/i, /facebook\.net/i, /hotjar\.com/i, /segment\.com/i, /newrelic\.com/i, /datadoghq\.com/i];
+
+            // Slow resource detection
+            if (this.settings.slowResourceDetection && Array.isArray(data?.resources)) {
+                const heavy = data.resources.filter(r => {
+                    const isScript = (r.initiatorType || '').toLowerCase().includes('script');
+                    const isSlow = (r.duration || 0) >= slowDur || (r.encodedBodySize || 0) >= slowSize;
+                    const isThirdParty = (() => { try { return new URL(r.name).hostname !== new URL(data.url).hostname; } catch (_) { return false; }})();
+                    const isTracker = trackers.some(rx => rx.test(r.name || ''));
+                    return (isScript || isTracker) && isSlow && isThirdParty;
+                }).slice(0, 5);
+                if (heavy.length > 0) {
+                    findings.push({ type: 'slow-resources', heavy });
+                }
+            }
+
+            // CPU Hog from long tasks
+            if (this.settings.cpuHogWarning && data?.longTasks) {
+                const win = this.settings.cpuLongTaskWindowMs || 10000;
+                const thr = this.settings.cpuLongTaskTotalMsThreshold || 1000;
+                // data.longTasks.totalDurationMs is measured over a recent window in content script
+                if (data.longTasks.totalDurationMs >= thr) {
+                    findings.push({ type: 'cpu-hog', total: data.longTasks.totalDurationMs, windowMs: win });
+                }
+            }
+
+            if (findings.length > 0) {
+                // Attach summary to latest speed session for same URL/origin
+                try {
+                    const key = 'fastbrowse_speed_sessions';
+                    const obj = await chrome.storage.local.get([key]);
+                    const arr = Array.isArray(obj[key]) ? obj[key] : [];
+                    const now = Date.now();
+                    let idx = -1;
+                    for (let i = 0; i < arr.length; i++) {
+                        const e = arr[i];
+                        const sameUrl = e.url === data.url;
+                        const sameHost = (()=>{ try { return new URL(e.url).hostname === new URL(data.url).hostname; } catch(_) { return false; }})();
+                        if ((sameUrl || sameHost) && (now - e.ts) < 2*60*1000) { idx = i; break; }
+                    }
+                    if (idx >= 0) {
+                        const summary = {};
+                        const slow = findings.find(f => f.type === 'slow-resources');
+                        if (slow) summary.slowCount = slow.heavy.length;
+                        const cpu = findings.find(f => f.type === 'cpu-hog');
+                        if (cpu) summary.cpuLongTaskTotalMs = cpu.total;
+                        arr[idx].bottlenecks = summary;
+                        await chrome.storage.local.set({ [key]: arr });
+                    }
+                } catch (_) {}
+                if (this.settings.showNotifications) {
+                    const host = (()=>{ try { return new URL(data.url).hostname; } catch(_) { return 'this page'; } })();
+                    const parts = findings.map(f => {
+                        if (f.type === 'slow-resources') return `${f.heavy.length} slow third‑party script(s)`;
+                        if (f.type === 'cpu-hog') return `Long tasks ${f.total}ms/${(f.windowMs/1000)}s`;
+                        return f.type;
+                    });
+                    this.showNotification(`⚠️ Bottlenecks on ${host}: ${parts.join(', ')}`);
+                }
+            }
+        } catch (e) {
+            console.debug('handleBottleneckReport failed', e);
+        }
+    }
+
+    // Periodic memory leak alert integrated with forecasting
+    async memoryLeakAlertCheck() {
+        try {
+            if (!this.settings.memoryLeakAlerts) return;
+            const look = this.settings.memoryLeakLookbackMinutes || 5;
+            const samples = this.getRecentSamples(look);
+            if (samples.length < 2) return;
+            const slope = this.computeSlopePercentPerMinute(samples);
+            if (slope < (this.settings.memoryLeakSlopeThreshold || 1)) return; // below threshold
+            // Attribute to active tab domain
+            const activeTabs = await chrome.tabs.query({ active: true, currentWindow: true });
+            if (activeTabs && activeTabs[0] && activeTabs[0].url) {
+                const host = new URL(activeTabs[0].url).hostname;
+                this.showNotification(`🧪 Memory leak suspected: rising usage while on ${host}`);
+            }
+        } catch (e) { /* ignore */ }
     }
 
     // ============================================================================
