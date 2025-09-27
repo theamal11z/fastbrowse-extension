@@ -8,6 +8,11 @@ class FocusModeManager {
         this.hiddenElements = new Set();
         this.observers = [];
         
+        // Runtime config (loaded from settings)
+        this.config = {
+            minimalTheme: true // respect focusMinimalTheme setting
+        };
+        
         // Context-aware properties
         this.contextRules = null;
         this.lastContextUpdate = 0;
@@ -100,6 +105,9 @@ class FocusModeManager {
 
     async init() {
         try {
+            // Load config from settings (for theme toggle, etc.)
+            await this.loadSettings();
+            
             // Check if focus mode is enabled
             await this.loadFocusState();
             
@@ -129,7 +137,19 @@ class FocusModeManager {
             console.debug('Error initializing focus mode:', error);
         }
     }
-
+    
+    async loadSettings() {
+        try {
+            const response = await this.sendMessage({ action: 'getSettings' });
+            if (response && response.success && response.data) {
+                const s = response.data;
+                this.config.minimalTheme = (s.focusMinimalTheme !== false);
+            }
+        } catch (_) {
+            // keep defaults
+        }
+    }
+    
     async loadFocusState() {
         try {
             const response = await this.sendMessage({ action: 'getFocusState' });
@@ -180,8 +200,10 @@ class FocusModeManager {
             // Apply site-specific distraction removal
             this.removeDistractions();
             
-            // Apply minimal UI theme
-            this.applyMinimalTheme();
+            // Apply minimal UI theme (only if enabled in settings)
+            if (this.config.minimalTheme) {
+                this.applyMinimalTheme();
+            }
             
             // Disable animations
             this.disableAnimations();
