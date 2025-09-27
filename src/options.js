@@ -36,6 +36,23 @@ class OptionsManager {
             webglForceHighPerf: document.getElementById('webgl-force-high-perf'),
             webglAntialias: document.getElementById('webgl-antialias'),
             webglPreserve: document.getElementById('webgl-preserve'),
+            // Smart Cache Management
+            smartCacheEnabled: document.getElementById('smart-cache-enabled'),
+            aggressivePrefetchEnabled: document.getElementById('aggressive-prefetch-enabled'),
+            precacheMaxLinks: document.getElementById('precache-max-links'),
+            precacheMaxLinksValue: document.getElementById('precache-max-links-value'),
+            precacheIdleDelay: document.getElementById('precache-idle-delay'),
+            precacheIdleDelayValue: document.getElementById('precache-idle-delay-value'),
+            runPrecacheNow: document.getElementById('precache-now'),
+            intelligentCacheClearEnabled: document.getElementById('intelligent-cache-clear-enabled'),
+            runCacheClear: document.getElementById('run-cache-clear'),
+            cacheClearStatus: document.getElementById('cache-clear-status'),
+            cacheCompressionEnabled: document.getElementById('cache-compression-enabled'),
+            // Profile Optimization
+            profileOptimizationEnabled: document.getElementById('profile-optimization-enabled'),
+            optimizeIdbCurrent: document.getElementById('optimize-idb-current'),
+            optimizeIdbRecent: document.getElementById('optimize-idb-recent'),
+            idbOptStatus: document.getElementById('idb-opt-status'),
             memoryWarnings: document.getElementById('memory-warnings'),
             // Extension monitoring elements
             extensionMonitoring: document.getElementById('extension-monitoring'),
@@ -352,6 +369,27 @@ class OptionsManager {
         }
         if (this.elements.jsDeferralEnabled) this.elements.jsDeferralEnabled.addEventListener('change', () => this.saveSettings());
         if (this.elements.jsDeferralMode) this.elements.jsDeferralMode.addEventListener('change', () => this.saveSettings());
+
+        // Smart Cache Management listeners
+        if (this.elements.smartCacheEnabled) this.elements.smartCacheEnabled.addEventListener('change', () => this.saveSettings());
+        if (this.elements.aggressivePrefetchEnabled) this.elements.aggressivePrefetchEnabled.addEventListener('change', () => this.saveSettings());
+        if (this.elements.precacheMaxLinks) {
+            this.elements.precacheMaxLinks.addEventListener('input', () => this.elements.precacheMaxLinksValue.textContent = this.elements.precacheMaxLinks.value);
+            this.elements.precacheMaxLinks.addEventListener('change', () => this.saveSettings());
+        }
+        if (this.elements.precacheIdleDelay) {
+            this.elements.precacheIdleDelay.addEventListener('input', () => this.elements.precacheIdleDelayValue.textContent = this.elements.precacheIdleDelay.value);
+            this.elements.precacheIdleDelay.addEventListener('change', () => this.saveSettings());
+        }
+        if (this.elements.runPrecacheNow) this.elements.runPrecacheNow.addEventListener('click', () => this.runAggressivePrecache());
+        if (this.elements.intelligentCacheClearEnabled) this.elements.intelligentCacheClearEnabled.addEventListener('change', () => this.saveSettings());
+        if (this.elements.runCacheClear) this.elements.runCacheClear.addEventListener('click', () => this.runIntelligentCacheClear());
+        if (this.elements.cacheCompressionEnabled) this.elements.cacheCompressionEnabled.addEventListener('change', () => this.saveSettings());
+
+        // Profile Optimization listeners
+        if (this.elements.profileOptimizationEnabled) this.elements.profileOptimizationEnabled.addEventListener('change', () => this.saveSettings());
+        if (this.elements.optimizeIdbCurrent) this.elements.optimizeIdbCurrent.addEventListener('click', () => this.optimizeIndexedDBCurrent());
+        if (this.elements.optimizeIdbRecent) this.elements.optimizeIdbRecent.addEventListener('click', () => this.optimizeIndexedDBRecent());
         
         // Save button
         this.elements.saveButton.addEventListener('click', () => {
@@ -547,6 +585,17 @@ class OptionsManager {
                 if (this.elements.jsDeferralEnabled) this.elements.jsDeferralEnabled.checked = settings.jsDeferralEnabled || false;
                 if (this.elements.jsDeferralMode) this.elements.jsDeferralMode.value = settings.jsDeferralMode || 'safe';
 
+                // Smart Cache Management
+                if (this.elements.smartCacheEnabled) this.elements.smartCacheEnabled.checked = settings.smartCacheEnabled !== false;
+                if (this.elements.aggressivePrefetchEnabled) this.elements.aggressivePrefetchEnabled.checked = settings.aggressivePrefetchEnabled !== false;
+                if (this.elements.precacheMaxLinks) { this.elements.precacheMaxLinks.value = settings.precacheMaxLinks || 6; this.elements.precacheMaxLinksValue.textContent = settings.precacheMaxLinks || 6; }
+                if (this.elements.precacheIdleDelay) { this.elements.precacheIdleDelay.value = settings.precacheIdleDelayMs || 1500; this.elements.precacheIdleDelayValue.textContent = settings.precacheIdleDelayMs || 1500; }
+                if (this.elements.intelligentCacheClearEnabled) this.elements.intelligentCacheClearEnabled.checked = settings.intelligentCacheClearEnabled !== false;
+                if (this.elements.cacheCompressionEnabled) this.elements.cacheCompressionEnabled.checked = settings.cacheCompressionEnabled || false;
+
+                // Profile Optimization
+                if (this.elements.profileOptimizationEnabled) this.elements.profileOptimizationEnabled.checked = settings.profileOptimizationEnabled !== false;
+
                 // Flags Manager
                 if (this.elements.flagsManagerEnabled) this.elements.flagsManagerEnabled.checked = settings.flagsManagerEnabled !== false;
                 if (this.elements.flagGpuRasterization) this.elements.flagGpuRasterization.checked = !!settings.flagsEnableGpuRasterization;
@@ -680,6 +729,13 @@ class OptionsManager {
                 cssDeferMax: this.elements.cssDeferMax ? parseInt(this.elements.cssDeferMax.value) : 2,
                 jsDeferralEnabled: this.elements.jsDeferralEnabled ? this.elements.jsDeferralEnabled.checked : false,
                 jsDeferralMode: this.elements.jsDeferralMode ? this.elements.jsDeferralMode.value : 'safe',
+                // Smart Cache Management
+                smartCacheEnabled: this.elements.smartCacheEnabled ? this.elements.smartCacheEnabled.checked : true,
+                aggressivePrefetchEnabled: this.elements.aggressivePrefetchEnabled ? this.elements.aggressivePrefetchEnabled.checked : true,
+                precacheMaxLinks: this.elements.precacheMaxLinks ? parseInt(this.elements.precacheMaxLinks.value) : 6,
+                precacheIdleDelayMs: this.elements.precacheIdleDelay ? parseInt(this.elements.precacheIdleDelay.value) : 1500,
+                intelligentCacheClearEnabled: this.elements.intelligentCacheClearEnabled ? this.elements.intelligentCacheClearEnabled.checked : true,
+                cacheCompressionEnabled: this.elements.cacheCompressionEnabled ? this.elements.cacheCompressionEnabled.checked : false,
                 // Bottlenecks
                 bottlenecksEnabled: this.elements.bottlenecksEnabled ? this.elements.bottlenecksEnabled.checked : true,
                 slowResourceDetection: this.elements.slowResourceDetection ? this.elements.slowResourceDetection.checked : true,
@@ -1124,6 +1180,58 @@ class OptionsManager {
             // Experimental suggestions can be added here when toggled; keeping minimal and safe by default
         } catch (_) {}
         return parts.join(' ');
+    }
+
+    async runAggressivePrecache() {
+        try {
+            await this.sendMessage({ action: 'runAggressivePrecache' });
+        } catch (_) {}
+    }
+
+    async runIntelligentCacheClear() {
+        try {
+            const resp = await this.sendMessage({ action: 'runIntelligentCacheClear' });
+            if (resp && resp.success && this.elements.cacheClearStatus) {
+                this.elements.cacheClearStatus.textContent = 'Done';
+                setTimeout(()=>{ this.elements.cacheClearStatus.textContent=''; }, 1500);
+            }
+        } catch (e) {
+            if (this.elements.cacheClearStatus) {
+                this.elements.cacheClearStatus.textContent = 'Failed';
+                setTimeout(()=>{ this.elements.cacheClearStatus.textContent=''; }, 2000);
+            }
+        }
+    }
+
+    async optimizeIndexedDBCurrent() {
+        try {
+            const resp = await this.sendMessage({ action: 'optimizeIndexedDBCurrent' });
+            if (resp && resp.success && this.elements.idbOptStatus) {
+                this.elements.idbOptStatus.textContent = 'Optimized current';
+                setTimeout(()=>{ this.elements.idbOptStatus.textContent=''; }, 1500);
+            }
+        } catch (e) {
+            if (this.elements.idbOptStatus) {
+                this.elements.idbOptStatus.textContent = 'Failed';
+                setTimeout(()=>{ this.elements.idbOptStatus.textContent=''; }, 2000);
+            }
+        }
+    }
+
+    async optimizeIndexedDBRecent() {
+        try {
+            const resp = await this.sendMessage({ action: 'optimizeIndexedDBRecent' });
+            if (resp && resp.success && this.elements.idbOptStatus) {
+                const n = (resp.data && resp.data.count) || 0;
+                this.elements.idbOptStatus.textContent = `Optimized ${n}`;
+                setTimeout(()=>{ this.elements.idbOptStatus.textContent=''; }, 1500);
+            }
+        } catch (e) {
+            if (this.elements.idbOptStatus) {
+                this.elements.idbOptStatus.textContent = 'Failed';
+                setTimeout(()=>{ this.elements.idbOptStatus.textContent=''; }, 2000);
+            }
+        }
     }
 
     async copyFlags(fullCommand = false) {

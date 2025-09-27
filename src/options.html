@@ -167,6 +167,76 @@
     </div>
     
     <div class="section">
+        <h2>🛠️ Profile Optimization</h2>
+
+        <label>
+            <input type="checkbox" id="profile-optimization-enabled">
+            Enable Profile Optimization helpers
+        </label>
+        <div class="description">Guided actions to maintain site storage. Extensions cannot defragment Chrome’s internal profile files directly.</div>
+
+        <div class="subsection" style="margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 6px;">
+            <h3 style="margin: 0 0 12px 0; font-size: 16px; color: #333;">IndexedDB Optimization</h3>
+            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                <button id="optimize-idb-current">Optimize current site IndexedDB</button>
+                <button id="optimize-idb-recent" class="secondary">Optimize recent sites (safe)</button>
+                <span id="idb-opt-status" class="save-status"></span>
+            </div>
+            <div class="description" style="margin-top: 6px;">Clears IndexedDB for the chosen origin(s); preserves cookies/storage for other types. Useful when sites get sluggish due to large local databases.</div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>🧠 Smart Cache Management</h2>
+
+        <label>
+            <input type="checkbox" id="smart-cache-enabled">
+            Enable Smart Cache Management
+        </label>
+        <div class="description">Aggressive pre-caching during idle, intelligent cache clearing with warming, and optional cache compression toggles</div>
+
+        <div class="subsection" style="margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 6px;">
+            <h3 style="margin: 0 0 12px 0; font-size: 16px; color: #333;">Aggressive Pre‑caching</h3>
+            <label>
+                <input type="checkbox" id="aggressive-prefetch-enabled"> Pre-cache likely next pages during idle moments
+            </label>
+            <div class="range-container" style="margin-top: 8px;">
+                <label style="flex:1;">Max links to prefetch:</label>
+                <input type="range" id="precache-max-links" min="0" max="12" value="6">
+                <span class="range-value" id="precache-max-links-value">6</span>
+            </div>
+            <div class="range-container" style="margin-top: 8px;">
+                <label style="flex:1;">Idle delay (ms):</label>
+                <input type="range" id="precache-idle-delay" min="0" max="5000" step="100" value="1500">
+                <span class="range-value" id="precache-idle-delay-value">1500</span>
+            </div>
+            <div style="margin-top:8px; display:flex; gap:8px;">
+                <button id="precache-now">Pre-cache now</button>
+            </div>
+        </div>
+
+        <div class="subsection" style="margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 6px;">
+            <h3 style="margin: 0 0 12px 0; font-size: 16px; color: #333;">Intelligent Cache Clearing</h3>
+            <label>
+                <input type="checkbox" id="intelligent-cache-clear-enabled"> Enable intelligent cache clear
+            </label>
+            <div class="description">Clears HTTP cache and re-warms important sites (active/pinned tabs, recent pages)</div>
+            <div style="margin-top:8px; display:flex; gap:8px;">
+                <button id="run-cache-clear">Run Intelligent Cache Clear</button>
+                <span id="cache-clear-status" class="save-status"></span>
+            </div>
+        </div>
+
+        <div class="subsection" style="margin: 20px 0; padding: 15px; background: #fff7e6; border-radius: 6px; border-left: 4px solid #ff9800;">
+            <h3 style="margin: 0 0 12px 0; font-size: 16px; color: #333;">Cache Compression (toggle)</h3>
+            <label>
+                <input type="checkbox" id="cache-compression-enabled"> Use cache compression where applicable (best‑effort)
+            </label>
+            <div class="description">Note: Browser HTTP cache compression is managed by Chrome; this toggle primarily influences extension prefetch/caching heuristics.</div>
+        </div>
+    </div>
+
+    <div class="section">
         <h2>🎮 GPU Acceleration Control</h2>
 
         <label>

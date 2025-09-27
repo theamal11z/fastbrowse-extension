@@ -5,6 +5,17 @@ class FastBrowse {
     constructor() {
 this.settings = {
             autoSuspend: true,
+            // Profile Optimization
+            profileOptimizationEnabled: true,
+            idbOptimizeEnabled: true,
+            idbOptimizeBatchMax: 5,
+            // Smart Cache Management
+            smartCacheEnabled: true,
+            aggressivePrefetchEnabled: true,
+            precacheIdleDelayMs: 1500,
+            precacheMaxLinks: 6,
+            intelligentCacheClearEnabled: true,
+            cacheCompressionEnabled: false,
             // Bottleneck Identification
             bottlenecksEnabled: true,
             slowResourceDetection: true,
@@ -3732,6 +3743,49 @@ this.restorationStats.memoryOptimized++;
                     }
                     break;
                 
+                case 'runAggressivePrecache':
+                    try {
+                        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+                        if (tabs.length > 0) {
+                            chrome.tabs.sendMessage(tabs[0].id, { action: 'aggressivePrefetchNow' }, () => {});
+                        }
+                        sendResponse({ success: true });
+                    } catch (error) {
+                        sendResponse({ success: false, error: error.message });
+                    }
+                    break;
+
+                case 'runIntelligentCacheClear':
+                    try {
+                        await this.runIntelligentCacheClear();
+                        sendResponse({ success: true });
+                    } catch (error) {
+                        sendResponse({ success: false, error: error.message });
+                    }
+                    break;
+
+                case 'optimizeIndexedDBCurrent':
+                    try {
+                        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+                        if (tabs.length > 0 && tabs[0].url && tabs[0].url.startsWith('http')) {
+                            const origin = new URL(tabs[0].url).origin;
+                            await this.optimizeIndexedDBForOrigin(origin);
+                        }
+                        sendResponse({ success: true });
+                    } catch (error) {
+                        sendResponse({ success: false, error: error.message });
+                    }
+                    break;
+
+                case 'optimizeIndexedDBRecent':
+                    try {
+                        const count = await this.optimizeIndexedDBForRecentOrigins();
+                        sendResponse({ success: true, data: { count } });
+                    } catch (error) {
+                        sendResponse({ success: false, error: error.message });
+                    }
+                    break;
+
                 default:
                     sendResponse({ success: false, error: 'Unknown action' });
             }
@@ -3964,6 +4018,85 @@ this.restorationStats.memoryOptimized++;
             for (let i = 0; i < 10; i++) {
                 existingItems.push(`assign-tag-${i}`);
             }
+    
+    // Intelligent cache clear: clears browser cache then re-warms important origins
+    async runIntelligentCacheClear() {
+        try {
+            if (!this.settings.intelligentCacheClearEnabled) return;
+            // Clear HTTP cache only (preserve cookies/storage)
+            await chrome.browsingData.remove({}, { cache: true });
+            const origins = new Set();
+            // Current tabs (pinned and active first)
+            const tabs = await chrome.tabs.query({});
+            for (const t of tabs) {
+                try {
+                    if (!t.url || !t.url.startsWith('http')) continue;
+                    const u = new URL(t.url);
+                    if (t.pinned || t.active) origins.add(u.origin);
+                } catch (_) {}
+            }
+            // Recent speed sessions
+            try {
+                const sessions = await this.getSpeedSessions();
+                sessions.slice(0, 10).forEach(s => { try { origins.add(new URL(s.url).origin); } catch(_){} });
+            } catch (_) {}
+            // Rewarm by fetching home pages (best-effort)
+            const tasks = Array.from(origins).slice(0, 10).map(async (origin) => {
+                try {
+                    await fetch(origin + '/', { mode: 'no-cors', cache: 'reload' });
+                } catch (_) {}
+            });
+            await Promise.allSettled(tasks);
+            if (this.settings.showNotifications) {
+                this.showNotification(`🧼 Cache cleared and re-warmed ${origins.size} origin(s)`);
+            }
+        } catch (e) {
+            console.debug('runIntelligentCacheClear failed', e);
+        }
+    }
+
+    // IndexedDB optimization helpers
+    async optimizeIndexedDBForOrigin(origin) {
+        try {
+            if (!this.settings.profileOptimizationEnabled || !this.settings.idbOptimizeEnabled) return 0;
+            // Clear IndexedDB for a given origin
+            await chrome.browsingData.remove({ origins: [origin] }, { indexedDB: true });
+            if (this.settings.showNotifications) {
+                this.showNotification(`🧹 IndexedDB optimized for ${origin}`);
+            }
+            return 1;
+        } catch (e) {
+            console.debug('optimizeIndexedDBForOrigin failed', e);
+            return 0;
+        }
+    }
+
+    async optimizeIndexedDBForRecentOrigins() {
+        try {
+            if (!this.settings.profileOptimizationEnabled || !this.settings.idbOptimizeEnabled) return 0;
+            const sessions = await this.getSpeedSessions();
+            const tabs = await chrome.tabs.query({});
+            const important = new Set();
+            for (const t of tabs) {
+                try { if (t.url && t.url.startsWith('http')) { const o = new URL(t.url).origin; if (t.active || t.pinned) important.add(o); } } catch(_){}
+            }
+            const origins = [];
+            const seen = new Set();
+            sessions.slice(0, 20).forEach(s => { try { const o = new URL(s.url).origin; if (!seen.has(o)) { seen.add(o); origins.push(o); } } catch(_){} });
+            // Avoid clearing important origins
+            const targets = origins.filter(o => !important.has(o)).slice(0, Math.max(1, this.settings.idbOptimizeBatchMax || 5));
+            for (const o of targets) {
+                try { await chrome.browsingData.remove({ origins: [o] }, { indexedDB: true }); } catch(_){}
+            }
+            if (this.settings.showNotifications) {
+                this.showNotification(`🧹 Optimized IndexedDB for ${targets.length} recent site(s)`);
+            }
+            return targets.length;
+        } catch (e) {
+            console.debug('optimizeIndexedDBForRecentOrigins failed', e);
+            return 0;
+        }
+    }
             
             // Use Promise-based removal with proper error handling
             const removePromises = existingItems.map(id => {

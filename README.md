@@ -44,6 +44,8 @@ FastBrowse is a powerful Chrome extension designed to minimize browser memory co
     - Linux: `google-chrome --enable-gpu-rasterization --enable-features=ParallelDownloading`
     - Windows: `"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" --enable-gpu-rasterization --enable-features=ParallelDownloading`
     - macOS: `"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --enable-gpu-rasterization --enable-features=ParallelDownloading`
+- **Smart Cache Management**: Aggressive pre-caching during idle, intelligent cache clearing with warming, and best‑effort cache compression toggle
+- **Profile Optimization**: IndexedDB clean-up tools per site or across recent sites (safe batch), with clear guidance and safety
 - **Configurable Settings**: Fully customizable behavior for all features
 
 ### 🏷️ Tag System & Auto Grouping
@@ -333,6 +335,24 @@ Settings (Options → GPU Acceleration Control):
 - Hardware Acceleration mode
 - WebGL Profile + toggles (Force high-performance GPU, Antialias, Preserve drawing buffer)
 
+### Smart Cache Management
+
+1. **Aggressive Pre‑caching**
+   - Scores on‑page links and prefetches likely next pages during idle
+   - Adjustable: max links and idle delay
+   - “Pre‑cache now” action to test immediately
+2. **Intelligent Cache Clearing**
+   - Clears HTTP cache only (preserves cookies/storage)
+   - Re‑warms important origins: active/pinned tabs and recent sites
+3. **Cache Compression (best‑effort)**
+   - Toggle influences extension heuristics; Chrome manages HTTP cache compression internally
+
+Settings (Options → Smart Cache Management):
+- Enable Smart Cache Management
+- Aggressive Pre‑caching toggle + Max links + Idle delay
+- Intelligent Cache Clearing toggle + “Run” action
+- Cache Compression toggle
+
 ### Speed Dashboard
 
 1. **Page Load Timelines**
@@ -349,6 +369,19 @@ Settings (Options → GPU Acceleration Control):
 Settings (Options → Speed Dashboard):
 - Enable Speed Dashboard
 - Refresh/clear history from the Options page
+
+### Profile Optimization
+
+1. **IndexedDB Optimization**
+   - Optimize current site: clears IndexedDB for the active origin (cookies/storage preserved)
+   - Optimize recent sites: clears IndexedDB for a safe batch of recent origins (skips active/pinned)
+
+Notes:
+- Browser profile “defragmentation” is not exposed to extensions; this feature provides safe maintenance via Chrome’s browsingData APIs.
+
+Settings (Options → Profile Optimization):
+- Enable Profile Optimization helpers
+- Buttons for current site and recent sites actions
 
 ## 🔧 Development
 
