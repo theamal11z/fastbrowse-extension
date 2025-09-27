@@ -8,6 +8,11 @@ class FocusModeManager {
         this.hiddenElements = new Set();
         this.observers = [];
         
+        // Context-aware properties
+        this.contextRules = null;
+        this.lastContextUpdate = 0;
+        this.currentDomain = window.location.hostname.replace('www.', '').toLowerCase();
+        
         // Site-specific selectors for distraction removal
         this.distractionSelectors = {
             'youtube.com': [
@@ -109,6 +114,9 @@ class FocusModeManager {
                 return true; // Keep message channel open for async responses
             });
 
+            // Load context rules
+            await this.loadContextRules();
+            
             // Apply focus mode if enabled
             if (this.isEnabled) {
                 this.enableFocusMode();
@@ -149,6 +157,13 @@ class FocusModeManager {
                 break;
             case 'getFocusState':
                 sendResponse({ success: true, enabled: this.isEnabled });
+                break;
+            case 'updateContextRules':
+                this.updateContextRules(request);
+                sendResponse({ success: true });
+                break;
+            case 'getContextRules':
+                sendResponse({ success: true, data: this.contextRules });
                 break;
         }
         return true;
@@ -210,9 +225,8 @@ class FocusModeManager {
     }
 
     removeDistractions() {
-        const hostname = window.location.hostname.replace('www.', '');
-        const siteSelectors = this.distractionSelectors[hostname] || [];
-        const allSelectors = [...siteSelectors, ...this.globalDistractions];
+        // Use context-aware selectors if available
+        const allSelectors = this.contextRules ? this.getSelectorsForContext() : this.getAllSelectors();
 
         allSelectors.forEach(selector => {
             try {
@@ -226,6 +240,16 @@ class FocusModeManager {
                 console.warn('Invalid selector:', selector, error);
             }
         });
+        
+        // Log context information for debugging
+        if (this.contextRules) {
+            console.debug('FastBrowse Focus Mode: Applied context-aware distraction removal', {
+                context: this.contextRules.context,
+                workflow: this.contextRules.workflow,
+                distractionLevel: this.contextRules.distractionLevel,
+                selectorsUsed: allSelectors.length
+            });
+        }
     }
 
     hideElement(element) {
@@ -600,6 +624,133 @@ class FocusModeManager {
         });
     }
 
+    async loadContextRules() {
+        try {
+            const response = await this.sendMessage({ 
+                action: 'getContextRules', 
+                domain: this.currentDomain 
+            });
+            if (response?.success) {
+                this.contextRules = response.data;
+                this.lastContextUpdate = Date.now();
+            }
+        } catch (error) {
+            console.debug('Failed to load context rules:', error);
+            // Set default context rules if we can't communicate with background
+            this.contextRules = {
+                context: 'personal',
+                workflow: null,
+                intensity: 'medium',
+                isSmartWhitelisted: false,
+                distractionLevel: 'medium'
+            };
+        }
+    }
+    
+    updateContextRules(request) {
+        this.contextRules = {
+            context: request.context || 'personal',
+            workflow: request.workflow || null,
+            intensity: request.intensity || 'medium',
+            isSmartWhitelisted: false, // Will be determined by background
+            distractionLevel: this.calculateDistractionLevel(request)
+        };
+        
+        this.lastContextUpdate = Date.now();
+        
+        // Re-apply focus mode with new context if currently enabled
+        if (this.isEnabled) {
+            this.reapplyFocusModeWithContext();
+        }
+    }
+    
+    calculateDistractionLevel(contextData) {
+        const { context, intensity, workflow } = contextData;
+        
+        // Smart whitelisted domains get reduced distraction removal
+        if (contextData.isSmartWhitelisted) {
+            return 'low';
+        }
+        
+        // Work context with high intensity = high distraction removal
+        if (context === 'work') {
+            switch (intensity) {
+                case 'high': return 'high';
+                case 'medium': return 'medium';
+                case 'low': return 'low';
+                default: return 'medium';
+            }
+        }
+        
+        // Personal context is generally more relaxed
+        if (context === 'personal') {
+            switch (intensity) {
+                case 'high': return 'medium'; // Reduce intensity for personal time
+                case 'medium': return 'low';
+                case 'low': return 'low';
+                default: return 'low';
+            }
+        }
+        
+        return 'medium'; // Default
+    }
+    
+    reapplyFocusModeWithContext() {
+        try {
+            // First restore any hidden elements
+            this.restoreDistractions();
+            
+            // Then re-apply with context-aware rules
+            this.removeDistractions();
+            
+            console.log('FastBrowse Focus Mode: Re-applied with context:', this.contextRules);
+        } catch (error) {
+            console.debug('Error re-applying focus mode with context:', error);
+        }
+    }
+    
+    getSelectorsForContext() {
+        if (!this.contextRules) {
+            return this.getAllSelectors(); // Fallback to all selectors
+        }
+        
+        const hostname = this.currentDomain;
+        const siteSelectors = this.distractionSelectors[hostname] || [];
+        let contextualSelectors = [...this.globalDistractions];
+        
+        switch (this.contextRules.distractionLevel) {
+            case 'low':
+                // Only remove the most obvious distractions
+                contextualSelectors = contextualSelectors.filter(selector => 
+                    selector.includes('advertisement') || 
+                    selector.includes('ad-') || 
+                    selector.includes('popup') ||
+                    selector.includes('banner')
+                );
+                // Only use high-priority site selectors
+                const prioritySelectors = siteSelectors.slice(0, Math.floor(siteSelectors.length / 3));
+                return [...prioritySelectors, ...contextualSelectors];
+                
+            case 'medium':
+                // Remove moderate distractions
+                const mediumSelectors = siteSelectors.slice(0, Math.floor(siteSelectors.length * 0.7));
+                return [...mediumSelectors, ...contextualSelectors];
+                
+            case 'high':
+                // Remove all distractions aggressively
+                return [...siteSelectors, ...contextualSelectors];
+                
+            default:
+                return this.getAllSelectors();
+        }
+    }
+    
+    getAllSelectors() {
+        const hostname = this.currentDomain;
+        const siteSelectors = this.distractionSelectors[hostname] || [];
+        return [...siteSelectors, ...this.globalDistractions];
+    }
+    
     destroy() {
         this.observers.forEach(observer => observer.disconnect());
         this.disableFocusMode();

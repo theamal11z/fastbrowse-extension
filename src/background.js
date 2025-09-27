@@ -70,7 +70,22 @@ class FastBrowse {
             // Restoration priority settings
             restorationPriorityMode: 'smart', // 'smart', 'manual', 'all'
             maxConcurrentRestorations: 3,
-            restorationMemoryBuffer: 5 // % memory buffer to maintain
+            restorationMemoryBuffer: 5, // % memory buffer to maintain
+            // Context-aware distraction removal settings
+            contextAwareEnabled: true,
+            workHoursEnabled: true,
+            workStartHour: 9, // 9 AM
+            workEndHour: 17, // 5 PM
+            workDays: [1, 2, 3, 4, 5], // Monday-Friday (0=Sunday, 6=Saturday)
+            workModeStrict: true, // Stricter distraction removal during work hours
+            personalModeRelaxed: false, // More relaxed rules during personal time
+            autoAdjustEnabled: true, // Auto-adjust based on active window content
+            smartWhitelistEnabled: true, // Smart whitelisting for important workflows
+            workflowDetectionEnabled: true, // Detect coding, writing, research workflows
+            contextSwitchDelay: 300000, // 5 minutes delay before switching context
+            workModeIntensity: 'high', // 'low', 'medium', 'high'
+            personalModeIntensity: 'medium', // 'low', 'medium', 'high'
+            smartWhitelistTimeout: 1800000 // 30 minutes smart whitelist timeout
         };
         
         this.suspendedTabs = new Map();
@@ -172,6 +187,14 @@ class FastBrowse {
             }]
         ]);
         
+        // Context-aware focus state
+        this.contextAwareFocus = null; // Will be initialized in init()
+        this.currentContext = 'personal'; // 'work' or 'personal'
+        this.detectedWorkflow = null; // Current detected workflow
+        this.smartWhitelist = new Map(); // domain -> expiry timestamp
+        this.contextSwitchTimeout = null; // Timeout for context switching
+        this.lastContextCheck = 0; // Last time context was checked
+        
         this.init();
     }
     
@@ -197,6 +220,12 @@ class FastBrowse {
         
         // Initialize tag system
         await this.initializeTagSystem();
+        
+        // Initialize context-aware focus
+        if (this.settings.contextAwareEnabled) {
+            this.contextAwareFocus = new ContextAwareFocus(this);
+            await this.contextAwareFocus.init();
+        }
         
         console.log('FastBrowse initialized');
     }
@@ -275,6 +304,11 @@ class FastBrowse {
         // Listen for keyboard shortcuts
         chrome.commands.onCommand.addListener((command) => {
             this.handleCommand(command);
+        });
+        
+        // Listen for alarms (for context-aware focus)
+        chrome.alarms.onAlarm.addListener((alarm) => {
+            this.handleAlarm(alarm);
         });
         
         // Setup context menus
@@ -3245,6 +3279,88 @@ class FastBrowse {
                     }
                     break;
                     
+                // Context-aware focus actions
+                case 'getContextInfo':
+                    try {
+                        const contextInfo = {
+                            currentContext: this.currentContext,
+                            detectedWorkflow: this.detectedWorkflow,
+                            smartWhitelist: Array.from(this.smartWhitelist.entries()),
+                            lastContextCheck: this.lastContextCheck,
+                            contextAwareEnabled: this.settings.contextAwareEnabled
+                        };
+                        if (this.contextAwareFocus) {
+                            contextInfo.contextHistory = this.contextAwareFocus.contextHistory.slice(-10);
+                        }
+                        sendResponse({ success: true, data: contextInfo });
+                    } catch (error) {
+                        console.error('Failed to get context info:', error);
+                        sendResponse({ success: false, error: error.message });
+                    }
+                    break;
+                    
+                case 'getContextRules':
+                    try {
+                        if (!this.contextAwareFocus) {
+                            sendResponse({ success: false, error: 'Context-aware focus not enabled' });
+                            break;
+                        }
+                        const domain = request.domain || 'unknown.com';
+                        const rules = this.contextAwareFocus.getContextRules(domain);
+                        sendResponse({ success: true, data: rules });
+                    } catch (error) {
+                        console.error('Failed to get context rules:', error);
+                        sendResponse({ success: false, error: error.message });
+                    }
+                    break;
+                    
+                case 'forceContextCheck':
+                    try {
+                        if (this.contextAwareFocus) {
+                            await this.contextAwareFocus.checkContext();
+                            sendResponse({ success: true, data: {
+                                currentContext: this.currentContext,
+                                detectedWorkflow: this.detectedWorkflow
+                            }});
+                        } else {
+                            sendResponse({ success: false, error: 'Context-aware focus not enabled' });
+                        }
+                    } catch (error) {
+                        console.error('Failed to force context check:', error);
+                        sendResponse({ success: false, error: error.message });
+                    }
+                    break;
+                    
+                case 'addToSmartWhitelist':
+                    try {
+                        if (!this.contextAwareFocus || !request.domain) {
+                            sendResponse({ success: false, error: 'Invalid request' });
+                            break;
+                        }
+                        const duration = request.duration || this.settings.smartWhitelistTimeout;
+                        const expiryTime = Date.now() + duration;
+                        this.smartWhitelist.set(request.domain.replace('www.', '').toLowerCase(), expiryTime);
+                        sendResponse({ success: true });
+                    } catch (error) {
+                        console.error('Failed to add to smart whitelist:', error);
+                        sendResponse({ success: false, error: error.message });
+                    }
+                    break;
+                    
+                case 'removeFromSmartWhitelist':
+                    try {
+                        if (!request.domain) {
+                            sendResponse({ success: false, error: 'Domain required' });
+                            break;
+                        }
+                        this.smartWhitelist.delete(request.domain.replace('www.', '').toLowerCase());
+                        sendResponse({ success: true });
+                    } catch (error) {
+                        console.error('Failed to remove from smart whitelist:', error);
+                        sendResponse({ success: false, error: error.message });
+                    }
+                    break;
+                    
                 default:
                     sendResponse({ success: false, error: 'Unknown action' });
             }
@@ -3439,6 +3555,20 @@ class FastBrowse {
         }
     }
     
+    async handleAlarm(alarm) {
+        try {
+            switch (alarm.name) {
+                case 'contextCheck':
+                    if (this.contextAwareFocus) {
+                        await this.contextAwareFocus.checkContext();
+                    }
+                    break;
+            }
+        } catch (error) {
+            console.debug('Alarm handler failed:', error);
+        }
+    }
+    
     // Quick tag the current tab with suggestions
     async quickTagCurrentTab(tab) {
         try {
@@ -3494,6 +3624,342 @@ class FastBrowse {
             console.error('Failed to show tag suggestions:', error);
             this.showNotification('Failed to get tag suggestions');
         }
+    }
+}
+
+// Context-Aware Focus Management Class
+class ContextAwareFocus {
+    constructor(fastBrowse) {
+        this.fastBrowse = fastBrowse;
+        this.workflowPatterns = {
+            coding: {
+                domains: ['github.com', 'stackoverflow.com', 'gitlab.com', 'bitbucket.org', 'codepen.io', 'jsfiddle.net', 'replit.com'],
+                keywords: ['code', 'programming', 'development', 'api', 'documentation', 'terminal', 'command'],
+                tabMinimum: 2
+            },
+            writing: {
+                domains: ['docs.google.com', 'notion.so', 'medium.com', 'substack.com', 'wordpress.com', 'blogger.com'],
+                keywords: ['write', 'document', 'article', 'blog', 'draft', 'edit'],
+                tabMinimum: 1
+            },
+            research: {
+                domains: ['scholar.google.com', 'jstor.org', 'pubmed.ncbi.nlm.nih.gov', 'arxiv.org', 'researchgate.net'],
+                keywords: ['research', 'study', 'paper', 'journal', 'academic', 'citation'],
+                tabMinimum: 3
+            },
+            design: {
+                domains: ['figma.com', 'sketch.com', 'canva.com', 'behance.net', 'dribbble.com', 'adobe.com'],
+                keywords: ['design', 'creative', 'ui', 'ux', 'prototype', 'mockup'],
+                tabMinimum: 2
+            }
+        };
+        
+        this.contextHistory = []; // Track context changes over time
+        this.workflowHistory = []; // Track detected workflows
+        this.lastWorkflowCheck = 0;
+        this.contextCheckInterval = null;
+    }
+    
+    async init() {
+        // Start context monitoring
+        this.startContextMonitoring();
+        
+        // Initial context check
+        await this.checkContext();
+        
+        console.log('ContextAwareFocus initialized');
+    }
+    
+    startContextMonitoring() {
+        // Check context every 2 minutes
+        this.contextCheckInterval = setInterval(() => {
+            this.checkContext();
+        }, 120000); // 2 minutes
+        
+        // Set up alarm for work hours detection
+        if (this.fastBrowse.settings.workHoursEnabled) {
+            chrome.alarms.create('contextCheck', { periodInMinutes: 5 });
+        }
+    }
+    
+    async checkContext() {
+        try {
+            const now = Date.now();
+            this.fastBrowse.lastContextCheck = now;
+            
+            // Determine if we're in work hours
+            const newContext = await this.determineWorkHours();
+            
+            // Check for workflow detection if enabled
+            let detectedWorkflow = null;
+            if (this.fastBrowse.settings.workflowDetectionEnabled) {
+                detectedWorkflow = await this.detectCurrentWorkflow();
+            }
+            
+            // Check if context has changed
+            const contextChanged = newContext !== this.fastBrowse.currentContext;
+            const workflowChanged = detectedWorkflow !== this.fastBrowse.detectedWorkflow;
+            
+            if (contextChanged || workflowChanged) {
+                await this.handleContextChange(newContext, detectedWorkflow);
+            }
+            
+            // Clean up expired smart whitelist entries
+            this.cleanupSmartWhitelist();
+            
+        } catch (error) {
+            console.debug('Context check failed:', error);
+        }
+    }
+    
+    async determineWorkHours() {
+        if (!this.fastBrowse.settings.workHoursEnabled) {
+            return 'personal';
+        }
+        
+        const now = new Date();
+        const currentHour = now.getHours();
+        const currentDay = now.getDay(); // 0 = Sunday, 1 = Monday, etc.
+        
+        const isWorkDay = this.fastBrowse.settings.workDays.includes(currentDay);
+        const isWorkHour = currentHour >= this.fastBrowse.settings.workStartHour && 
+                          currentHour < this.fastBrowse.settings.workEndHour;
+        
+        return (isWorkDay && isWorkHour) ? 'work' : 'personal';
+    }
+    
+    async detectCurrentWorkflow() {
+        try {
+            // Get all open tabs
+            const tabs = await chrome.tabs.query({});
+            const activeTabs = tabs.filter(tab => !tab.discarded && tab.url && !tab.url.startsWith('chrome://'));
+            
+            // Analyze tabs for workflow patterns
+            const workflowScores = {};
+            
+            for (const [workflowName, pattern] of Object.entries(this.workflowPatterns)) {
+                workflowScores[workflowName] = this.calculateWorkflowScore(activeTabs, pattern);
+            }
+            
+            // Find the workflow with the highest score
+            const bestWorkflow = Object.entries(workflowScores)
+                .reduce((best, [name, score]) => score > best.score ? { name, score } : best, { name: null, score: 0 });
+            
+            // Return workflow if score is significant (>0.3) and meets minimum tab requirement
+            if (bestWorkflow.score > 0.3) {
+                const pattern = this.workflowPatterns[bestWorkflow.name];
+                const relevantTabs = activeTabs.filter(tab => this.isTabRelevantToWorkflow(tab, pattern));
+                
+                if (relevantTabs.length >= pattern.tabMinimum) {
+                    return bestWorkflow.name;
+                }
+            }
+            
+            return null;
+            
+        } catch (error) {
+            console.debug('Workflow detection failed:', error);
+            return null;
+        }
+    }
+    
+    calculateWorkflowScore(tabs, pattern) {
+        let score = 0;
+        let relevantTabs = 0;
+        
+        for (const tab of tabs) {
+            if (this.isTabRelevantToWorkflow(tab, pattern)) {
+                relevantTabs++;
+                score += 1;
+                
+                // Boost score for active tabs
+                if (tab.active) {
+                    score += 0.5;
+                }
+                
+                // Boost score for recently accessed tabs
+                if (tab.lastAccessed && (Date.now() - tab.lastAccessed < 300000)) { // 5 minutes
+                    score += 0.3;
+                }
+            }
+        }
+        
+        // Normalize score by total tabs to get a ratio
+        return tabs.length > 0 ? score / tabs.length : 0;
+    }
+    
+    isTabRelevantToWorkflow(tab, pattern) {
+        try {
+            const url = new URL(tab.url);
+            const domain = url.hostname.toLowerCase().replace('www.', '');
+            const title = tab.title.toLowerCase();
+            const urlPath = url.pathname.toLowerCase();
+            
+            // Check domain matches
+            if (pattern.domains.some(d => domain.includes(d))) {
+                return true;
+            }
+            
+            // Check keyword matches in title or URL
+            if (pattern.keywords.some(keyword => 
+                title.includes(keyword) || urlPath.includes(keyword))) {
+                return true;
+            }
+            
+            return false;
+            
+        } catch (error) {
+            return false;
+        }
+    }
+    
+    async handleContextChange(newContext, detectedWorkflow) {
+        const oldContext = this.fastBrowse.currentContext;
+        const oldWorkflow = this.fastBrowse.detectedWorkflow;
+        
+        // Clear any pending context switch timeout
+        if (this.fastBrowse.contextSwitchTimeout) {
+            clearTimeout(this.fastBrowse.contextSwitchTimeout);
+        }
+        
+        // Apply context switch delay if enabled
+        if (this.fastBrowse.settings.contextSwitchDelay > 0 && oldContext !== newContext) {
+            this.fastBrowse.contextSwitchTimeout = setTimeout(async () => {
+                await this.applyContextChange(newContext, detectedWorkflow);
+            }, this.fastBrowse.settings.contextSwitchDelay);
+        } else {
+            await this.applyContextChange(newContext, detectedWorkflow);
+        }
+    }
+    
+    async applyContextChange(newContext, detectedWorkflow) {
+        const oldContext = this.fastBrowse.currentContext;
+        const oldWorkflow = this.fastBrowse.detectedWorkflow;
+        
+        // Update context
+        this.fastBrowse.currentContext = newContext;
+        this.fastBrowse.detectedWorkflow = detectedWorkflow;
+        
+        // Record context change in history
+        this.contextHistory.push({
+            timestamp: Date.now(),
+            oldContext,
+            newContext,
+            oldWorkflow,
+            newWorkflow: detectedWorkflow
+        });
+        
+        // Limit history to last 50 entries
+        if (this.contextHistory.length > 50) {
+            this.contextHistory = this.contextHistory.slice(-50);
+        }
+        
+        console.log(`Context changed: ${oldContext} -> ${newContext}, Workflow: ${oldWorkflow} -> ${detectedWorkflow}`);
+        
+        // Apply smart whitelist based on detected workflow
+        if (detectedWorkflow && this.fastBrowse.settings.smartWhitelistEnabled) {
+            await this.applySmartWhitelist(detectedWorkflow);
+        }
+        
+        // Update focus mode rules in all tabs if focus mode is active
+        if (this.fastBrowse.focusModeActive) {
+            await this.updateFocusRulesInAllTabs();
+        }
+    }
+    
+    async applySmartWhitelist(workflow) {
+        const pattern = this.workflowPatterns[workflow];
+        if (!pattern) return;
+        
+        const expiryTime = Date.now() + this.fastBrowse.settings.smartWhitelistTimeout;
+        
+        // Add workflow-related domains to smart whitelist
+        for (const domain of pattern.domains) {
+            this.fastBrowse.smartWhitelist.set(domain, expiryTime);
+        }
+        
+        console.log(`Smart whitelist applied for ${workflow} workflow`);
+    }
+    
+    cleanupSmartWhitelist() {
+        const now = Date.now();
+        for (const [domain, expiry] of this.fastBrowse.smartWhitelist.entries()) {
+            if (now > expiry) {
+                this.fastBrowse.smartWhitelist.delete(domain);
+            }
+        }
+    }
+    
+    async updateFocusRulesInAllTabs() {
+        try {
+            const tabs = await chrome.tabs.query({});
+            
+            for (const tab of tabs) {
+                if (tab.url && !tab.url.startsWith('chrome://')) {
+                    chrome.tabs.sendMessage(tab.id, {
+                        action: 'updateContextRules',
+                        context: this.fastBrowse.currentContext,
+                        workflow: this.fastBrowse.detectedWorkflow,
+                        intensity: this.getContextIntensity()
+                    }).catch(() => {}); // Ignore errors for tabs without content script
+                }
+            }
+        } catch (error) {
+            console.debug('Failed to update focus rules in tabs:', error);
+        }
+    }
+    
+    getContextIntensity() {
+        return this.fastBrowse.currentContext === 'work' 
+            ? this.fastBrowse.settings.workModeIntensity 
+            : this.fastBrowse.settings.personalModeIntensity;
+    }
+    
+    isSmartWhitelisted(domain) {
+        if (!this.fastBrowse.settings.smartWhitelistEnabled) return false;
+        
+        const cleanDomain = domain.replace('www.', '').toLowerCase();
+        const expiry = this.fastBrowse.smartWhitelist.get(cleanDomain);
+        
+        if (expiry && Date.now() < expiry) {
+            return true;
+        }
+        
+        // Check if domain matches any workflow patterns for current detected workflow
+        if (this.fastBrowse.detectedWorkflow) {
+            const pattern = this.workflowPatterns[this.fastBrowse.detectedWorkflow];
+            if (pattern && pattern.domains.some(d => cleanDomain.includes(d))) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+    
+    getContextRules(domain) {
+        const rules = {
+            context: this.fastBrowse.currentContext,
+            workflow: this.fastBrowse.detectedWorkflow,
+            intensity: this.getContextIntensity(),
+            isSmartWhitelisted: this.isSmartWhitelisted(domain),
+            distractionLevel: 'medium' // default
+        };
+        
+        // Adjust distraction level based on context and settings
+        if (this.fastBrowse.currentContext === 'work') {
+            if (this.fastBrowse.settings.workModeStrict) {
+                rules.distractionLevel = this.fastBrowse.settings.workModeIntensity;
+            }
+        } else if (this.fastBrowse.settings.personalModeRelaxed) {
+            rules.distractionLevel = 'low';
+        }
+        
+        // Override for smart whitelisted domains
+        if (rules.isSmartWhitelisted) {
+            rules.distractionLevel = 'low'; // Reduce distraction removal for important workflows
+        }
+        
+        return rules;
     }
 }
 

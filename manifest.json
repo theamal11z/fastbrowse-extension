@@ -14,7 +14,9 @@
     "scripting",
     "contextMenus",
     "offscreen",
-    "webNavigation"
+    "webNavigation",
+    "idle",
+    "alarms"
   ],
   
   "background": {

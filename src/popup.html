@@ -807,6 +807,41 @@
         </div>
     </div>
     
+    <!-- Context-Aware Status -->
+    <div class="context-aware-section" id="context-aware-section" style="background: #f8f9fa; padding: 12px; border-radius: 6px; margin-bottom: 16px; border-left: 4px solid #9c27b0; display: none;">
+        <div class="context-status">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 16px;">🧠</span>
+                    <span style="font-weight: bold; font-size: 14px; color: #333;">Context-Aware Focus</span>
+                </div>
+                <span id="context-status-badge" class="context-badge" style="padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: bold; background: #9c27b0; color: white;">Personal</span>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 12px; color: #666;">
+                <div>
+                    <strong style="color: #333;">Mode:</strong>
+                    <div id="context-mode" style="color: #9c27b0; font-weight: bold;">Personal</div>
+                </div>
+                <div>
+                    <strong style="color: #333;">Workflow:</strong>
+                    <div id="detected-workflow-popup" style="color: #9c27b0; font-weight: bold;">None</div>
+                </div>
+            </div>
+            
+            <div id="smart-whitelist-info" style="margin-top: 8px; padding: 6px; background: rgba(156, 39, 176, 0.1); border-radius: 4px; font-size: 11px; color: #666; display: none;">
+                <div style="display: flex; align-items: center; gap: 4px;">
+                    <span>✨</span>
+                    <span>Smart whitelist active for <strong id="whitelisted-domains">0</strong> domains</span>
+                </div>
+            </div>
+            
+            <div style="margin-top: 8px; font-size: 10px; color: #999;">
+                Last check: <span id="context-last-check">Never</span>
+            </div>
+        </div>
+    </div>
+    
     <div class="controls">
         <button id="suspend-all">Suspend All Tabs</button>
         <button id="auto-group-tabs-main">Auto-Group Tabs</button>
@@ -1004,9 +1039,57 @@
                 </div>
                 <div class="description">Select ambient music to accompany Focus Mode</div>
             </div>
+            
+            <!-- Context-Aware Settings -->
+            <div class="setting-item" style="border-top: 1px solid #e0e0e0; padding-top: 12px; margin-top: 12px;">
+                <label style="font-weight: bold; color: #9c27b0;">🧠 Context-Aware Focus</label>
+                <label class="switch">
+                    <input type="checkbox" id="set-context-aware-enabled">
+                    <span class="slider"></span>
+                </label>
+                <div class="description">Enable smart focus rules based on work hours and workflows</div>
+            </div>
+            
+            <div class="setting-item">
+                <label>Work hours detection</label>
+                <label class="switch">
+                    <input type="checkbox" id="set-work-hours-enabled">
+                    <span class="slider"></span>
+                </label>
+                <div class="description">Different focus rules during work vs personal time</div>
+            </div>
+            
+            <div class="setting-item">
+                <label>Work mode intensity</label>
+                <select id="set-work-mode-intensity" style="padding: 6px; border: 1px solid #ddd; border-radius: 4px; width: 100%;">
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                </select>
+                <div class="description">How aggressively to remove distractions during work</div>
+            </div>
+            
+            <div class="setting-item">
+                <label>Workflow detection</label>
+                <label class="switch">
+                    <input type="checkbox" id="set-workflow-detection-enabled">
+                    <span class="slider"></span>
+                </label>
+                <div class="description">Auto-detect coding, writing, research workflows</div>
+            </div>
+            
+            <div class="setting-item">
+                <label>Smart whitelisting</label>
+                <label class="switch">
+                    <input type="checkbox" id="set-smart-whitelist-enabled">
+                    <span class="slider"></span>
+                </label>
+                <div class="description">Temporarily disable distractions for important workflows</div>
+            </div>
         </div>
         <div style="margin-top: 12px; display: flex; gap: 8px;">
             <button id="save-settings">Save</button>
+            <button id="open-full-options" class="secondary">Full Options</button>
             <button id="close-settings" class="secondary">Close</button>
         </div>
     </div>

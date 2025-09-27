@@ -64,8 +64,39 @@ class OptionsManager {
             liteRestoredCount: document.getElementById('lite-restored-count'),
             memoryOptimizedCount: document.getElementById('memory-optimized-count'),
             lastRestorationTime: document.getElementById('last-restoration-time'),
+            // Context-aware elements
+            contextAwareEnabled: document.getElementById('context-aware-enabled'),
+            workHoursEnabled: document.getElementById('work-hours-enabled'),
+            workStartHour: document.getElementById('work-start-hour'),
+            workEndHour: document.getElementById('work-end-hour'),
+            workModeStrict: document.getElementById('work-mode-strict'),
+            personalModeRelaxed: document.getElementById('personal-mode-relaxed'),
+            autoAdjustEnabled: document.getElementById('auto-adjust-enabled'),
+            smartWhitelistEnabled: document.getElementById('smart-whitelist-enabled'),
+            workflowDetectionEnabled: document.getElementById('workflow-detection-enabled'),
+            contextSwitchDelay: document.getElementById('context-switch-delay'),
+            contextSwitchDelayValue: document.getElementById('context-switch-delay-value'),
+            workModeIntensity: document.getElementById('work-mode-intensity'),
+            personalModeIntensity: document.getElementById('personal-mode-intensity'),
+            smartWhitelistTimeout: document.getElementById('smart-whitelist-timeout'),
+            smartWhitelistTimeoutValue: document.getElementById('smart-whitelist-timeout-value'),
+            // Context status display elements
+            currentContext: document.getElementById('current-context'),
+            detectedWorkflow: document.getElementById('detected-workflow'),
+            lastContextCheck: document.getElementById('last-context-check'),
             saveButton: document.getElementById('save'),
             saveStatus: document.getElementById('save-status')
+        };
+        
+        // Work days checkboxes
+        this.workDayElements = {
+            0: document.getElementById('work-day-0'), // Sunday
+            1: document.getElementById('work-day-1'), // Monday
+            2: document.getElementById('work-day-2'), // Tuesday
+            3: document.getElementById('work-day-3'), // Wednesday
+            4: document.getElementById('work-day-4'), // Thursday
+            5: document.getElementById('work-day-5'), // Friday
+            6: document.getElementById('work-day-6')  // Saturday
         };
         
         this.init();
@@ -76,6 +107,7 @@ class OptionsManager {
         await this.loadFocusStats();
         await this.loadTagStats();
         await this.loadRestorationStats();
+        await this.loadContextInfo();
         this.setupEventListeners();
     }
     
@@ -201,6 +233,61 @@ class OptionsManager {
                 this.saveSettings();
             });
         }
+        
+        // Context-aware range value display updates
+        if (this.elements.contextSwitchDelay) {
+            this.elements.contextSwitchDelay.addEventListener('input', () => {
+                this.elements.contextSwitchDelayValue.textContent = this.elements.contextSwitchDelay.value;
+            });
+            
+            this.elements.contextSwitchDelay.addEventListener('change', () => {
+                this.saveSettings();
+            });
+        }
+        
+        if (this.elements.smartWhitelistTimeout) {
+            this.elements.smartWhitelistTimeout.addEventListener('input', () => {
+                this.elements.smartWhitelistTimeoutValue.textContent = this.elements.smartWhitelistTimeout.value;
+            });
+            
+            this.elements.smartWhitelistTimeout.addEventListener('change', () => {
+                this.saveSettings();
+            });
+        }
+        
+        // Context-aware select dropdowns
+        if (this.elements.workStartHour) {
+            this.elements.workStartHour.addEventListener('change', () => {
+                this.saveSettings();
+            });
+        }
+        
+        if (this.elements.workEndHour) {
+            this.elements.workEndHour.addEventListener('change', () => {
+                this.saveSettings();
+            });
+        }
+        
+        if (this.elements.workModeIntensity) {
+            this.elements.workModeIntensity.addEventListener('change', () => {
+                this.saveSettings();
+            });
+        }
+        
+        if (this.elements.personalModeIntensity) {
+            this.elements.personalModeIntensity.addEventListener('change', () => {
+                this.saveSettings();
+            });
+        }
+        
+        // Work days checkboxes
+        Object.values(this.workDayElements).forEach(element => {
+            if (element) {
+                element.addEventListener('change', () => {
+                    this.saveSettings();
+                });
+            }
+        });
     }
     
     async loadSettings() {
@@ -268,6 +355,33 @@ class OptionsManager {
                     this.elements.restorationMemoryBufferValue.textContent = settings.restorationMemoryBuffer || 5;
                 }
                 
+                // Context-aware settings
+                if (this.elements.contextAwareEnabled) {
+                    this.elements.contextAwareEnabled.checked = settings.contextAwareEnabled !== false;
+                    this.elements.workHoursEnabled.checked = settings.workHoursEnabled !== false;
+                    this.elements.workStartHour.value = settings.workStartHour || 9;
+                    this.elements.workEndHour.value = settings.workEndHour || 17;
+                    this.elements.workModeStrict.checked = settings.workModeStrict !== false;
+                    this.elements.personalModeRelaxed.checked = settings.personalModeRelaxed || false;
+                    this.elements.autoAdjustEnabled.checked = settings.autoAdjustEnabled !== false;
+                    this.elements.smartWhitelistEnabled.checked = settings.smartWhitelistEnabled !== false;
+                    this.elements.workflowDetectionEnabled.checked = settings.workflowDetectionEnabled !== false;
+                    this.elements.contextSwitchDelay.value = Math.round((settings.contextSwitchDelay || 300000) / 60000); // Convert ms to minutes
+                    this.elements.contextSwitchDelayValue.textContent = Math.round((settings.contextSwitchDelay || 300000) / 60000);
+                    this.elements.workModeIntensity.value = settings.workModeIntensity || 'high';
+                    this.elements.personalModeIntensity.value = settings.personalModeIntensity || 'medium';
+                    this.elements.smartWhitelistTimeout.value = Math.round((settings.smartWhitelistTimeout || 1800000) / 60000); // Convert ms to minutes
+                    this.elements.smartWhitelistTimeoutValue.textContent = Math.round((settings.smartWhitelistTimeout || 1800000) / 60000);
+                    
+                    // Work days checkboxes
+                    const workDays = settings.workDays || [1, 2, 3, 4, 5]; // Default Monday-Friday
+                    Object.entries(this.workDayElements).forEach(([day, element]) => {
+                        if (element) {
+                            element.checked = workDays.includes(parseInt(day));
+                        }
+                    });
+                }
+                
                 console.log('Settings loaded successfully');
             }
         } catch (error) {
@@ -323,6 +437,31 @@ class OptionsManager {
                 settings.restorationPriorityMode = this.elements.restorationPriorityMode.value;
                 settings.maxConcurrentRestorations = parseInt(this.elements.maxConcurrentRestorations.value);
                 settings.restorationMemoryBuffer = parseInt(this.elements.restorationMemoryBuffer.value);
+            }
+            
+            // Add context-aware settings if elements exist
+            if (this.elements.contextAwareEnabled) {
+                settings.contextAwareEnabled = this.elements.contextAwareEnabled.checked;
+                settings.workHoursEnabled = this.elements.workHoursEnabled.checked;
+                settings.workStartHour = parseInt(this.elements.workStartHour.value);
+                settings.workEndHour = parseInt(this.elements.workEndHour.value);
+                settings.workModeStrict = this.elements.workModeStrict.checked;
+                settings.personalModeRelaxed = this.elements.personalModeRelaxed.checked;
+                settings.autoAdjustEnabled = this.elements.autoAdjustEnabled.checked;
+                settings.smartWhitelistEnabled = this.elements.smartWhitelistEnabled.checked;
+                settings.workflowDetectionEnabled = this.elements.workflowDetectionEnabled.checked;
+                settings.contextSwitchDelay = parseInt(this.elements.contextSwitchDelay.value) * 60000; // Convert minutes to ms
+                settings.workModeIntensity = this.elements.workModeIntensity.value;
+                settings.personalModeIntensity = this.elements.personalModeIntensity.value;
+                settings.smartWhitelistTimeout = parseInt(this.elements.smartWhitelistTimeout.value) * 60000; // Convert minutes to ms
+                
+                // Work days array
+                settings.workDays = [];
+                Object.entries(this.workDayElements).forEach(([day, element]) => {
+                    if (element && element.checked) {
+                        settings.workDays.push(parseInt(day));
+                    }
+                });
             }
             
             const response = await this.sendMessage({ 
@@ -444,6 +583,48 @@ class OptionsManager {
                 this.elements.liteRestoredCount.textContent = 'Error';
                 this.elements.memoryOptimizedCount.textContent = 'Error';
                 this.elements.lastRestorationTime.textContent = 'Error';
+            }
+        }
+    }
+    
+    async loadContextInfo() {
+        try {
+            const response = await this.sendMessage({ action: 'getContextInfo' });
+            if (response.success && response.data) {
+                const contextInfo = response.data;
+                
+                // Update context status display
+                if (this.elements.currentContext) {
+                    this.elements.currentContext.textContent = contextInfo.currentContext || 'Personal';
+                }
+                
+                if (this.elements.detectedWorkflow) {
+                    this.elements.detectedWorkflow.textContent = contextInfo.detectedWorkflow || 'None';
+                }
+                
+                if (this.elements.lastContextCheck) {
+                    const lastCheck = contextInfo.lastContextCheck;
+                    if (lastCheck && lastCheck > 0) {
+                        const date = new Date(lastCheck);
+                        this.elements.lastContextCheck.textContent = date.toLocaleString();
+                    } else {
+                        this.elements.lastContextCheck.textContent = 'Never';
+                    }
+                }
+                
+                console.log('Context info loaded successfully');
+            }
+        } catch (error) {
+            console.debug('Failed to load context info:', error);
+            // Set default values if we can't load context info
+            if (this.elements.currentContext) {
+                this.elements.currentContext.textContent = 'Personal';
+            }
+            if (this.elements.detectedWorkflow) {
+                this.elements.detectedWorkflow.textContent = 'None';
+            }
+            if (this.elements.lastContextCheck) {
+                this.elements.lastContextCheck.textContent = 'Never';
             }
         }
     }

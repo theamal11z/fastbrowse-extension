@@ -54,6 +54,7 @@ class PopupManager {
         this.openSettingsButton = document.getElementById('open-settings');
         this.openSettingsTopButton = document.getElementById('open-settings-top');
         this.saveSettingsButton = document.getElementById('save-settings');
+        this.openFullOptionsButton = document.getElementById('open-full-options');
         this.closeSettingsButton = document.getElementById('close-settings');
         this.setAutoSuspend = document.getElementById('set-auto-suspend');
         this.setSuspendDelay = document.getElementById('set-suspend-delay');
@@ -73,6 +74,20 @@ class PopupManager {
         this.setRelationshipDecay = document.getElementById('set-relationship-decay');
         this.setRelationshipDecayValue = document.getElementById('set-relationship-decay-value');
         this.setFocusMusic = document.getElementById('set-focus-music');
+        this.setContextAwareEnabled = document.getElementById('set-context-aware-enabled');
+        this.setWorkHoursEnabled = document.getElementById('set-work-hours-enabled');
+        this.setWorkModeIntensity = document.getElementById('set-work-mode-intensity');
+        this.setWorkflowDetectionEnabled = document.getElementById('set-workflow-detection-enabled');
+        this.setSmartWhitelistEnabled = document.getElementById('set-smart-whitelist-enabled');
+        
+        // Context-aware elements
+        this.contextAwareSection = document.getElementById('context-aware-section');
+        this.contextStatusBadge = document.getElementById('context-status-badge');
+        this.contextMode = document.getElementById('context-mode');
+        this.detectedWorkflowPopup = document.getElementById('detected-workflow-popup');
+        this.smartWhitelistInfo = document.getElementById('smart-whitelist-info');
+        this.whitelistedDomains = document.getElementById('whitelisted-domains');
+        this.contextLastCheck = document.getElementById('context-last-check');
 
         // Declutter modal elements
         this.declutterModal = document.getElementById('declutter-modal');
@@ -107,6 +122,7 @@ class PopupManager {
             await this.loadFocusState();
             await this.loadTagData();
             await this.loadRestorationState();
+            await this.loadContextInfo();
             this.setupEventListeners();
             this.startRestorationMonitoring();
         } catch (error) {
@@ -228,6 +244,9 @@ class PopupManager {
         }
         if (this.saveSettingsButton) {
             this.saveSettingsButton.addEventListener('click', () => this.saveInlineSettings());
+        }
+        if (this.openFullOptionsButton) {
+            this.openFullOptionsButton.addEventListener('click', () => this.openFullOptions());
         }
         if (this.setDeclutterStale) {
             this.setDeclutterStale.addEventListener('input', () => {
@@ -933,6 +952,13 @@ class PopupManager {
                 } catch (_) { /* no tracks.json, ignore */ }
                 this.populateMusicOptions(defaultTracks);
                 if (this.setFocusMusic) this.setFocusMusic.value = s.focusModeMusic || 'none';
+                
+                // Context-aware settings
+                if (this.setContextAwareEnabled) this.setContextAwareEnabled.checked = s.contextAwareEnabled !== false;
+                if (this.setWorkHoursEnabled) this.setWorkHoursEnabled.checked = s.workHoursEnabled !== false;
+                if (this.setWorkModeIntensity) this.setWorkModeIntensity.value = s.workModeIntensity || 'high';
+                if (this.setWorkflowDetectionEnabled) this.setWorkflowDetectionEnabled.checked = s.workflowDetectionEnabled !== false;
+                if (this.setSmartWhitelistEnabled) this.setSmartWhitelistEnabled.checked = s.smartWhitelistEnabled !== false;
             }
         } catch (e) {
             console.error('Failed to load inline settings:', e);
@@ -1052,6 +1078,13 @@ class PopupManager {
             if (this.setRelationshipDecay) newSettings.relationshipDecayMinutes = parseInt(this.setRelationshipDecay.value);
             if (this.setFocusMusic) newSettings.focusModeMusic = this.setFocusMusic.value;
             
+            // Context-aware settings
+            if (this.setContextAwareEnabled) newSettings.contextAwareEnabled = this.setContextAwareEnabled.checked;
+            if (this.setWorkHoursEnabled) newSettings.workHoursEnabled = this.setWorkHoursEnabled.checked;
+            if (this.setWorkModeIntensity) newSettings.workModeIntensity = this.setWorkModeIntensity.value;
+            if (this.setWorkflowDetectionEnabled) newSettings.workflowDetectionEnabled = this.setWorkflowDetectionEnabled.checked;
+            if (this.setSmartWhitelistEnabled) newSettings.smartWhitelistEnabled = this.setSmartWhitelistEnabled.checked;
+            
             const response = await this.sendMessage({ action: 'updateSettings', settings: newSettings });
             if (response.success) {
                 this.showToast('Settings saved', 'success');
@@ -1062,6 +1095,21 @@ class PopupManager {
         } catch (e) {
             console.error('Failed to save inline settings:', e);
             this.showToast('Failed to save settings', 'error');
+        }
+    }
+    
+    openFullOptions() {
+        try {
+            // Open the full options page in a new tab
+            if (chrome.runtime.openOptionsPage) {
+                chrome.runtime.openOptionsPage();
+            } else {
+                // Fallback for older Chrome versions
+                window.open(chrome.runtime.getURL('src/options.html'));
+            }
+        } catch (error) {
+            console.error('Failed to open options page:', error);
+            this.showToast('Failed to open options page', 'error');
         }
     }
 
@@ -1708,6 +1756,91 @@ class PopupManager {
         }
         
         return tabItem;
+    }
+    
+    async loadContextInfo() {
+        try {
+            const response = await this.sendMessage({ action: 'getContextInfo' });
+            if (response.success && response.data) {
+                const contextInfo = response.data;
+                
+                // Show the context-aware section if enabled
+                if (contextInfo.contextAwareEnabled && this.contextAwareSection) {
+                    this.contextAwareSection.style.display = 'block';
+                    
+                    // Update context mode display
+                    const currentContext = contextInfo.currentContext || 'personal';
+                    const detectedWorkflow = contextInfo.detectedWorkflow || null;
+                    
+                    if (this.contextStatusBadge) {
+                        this.contextStatusBadge.textContent = currentContext.charAt(0).toUpperCase() + currentContext.slice(1);
+                        // Change badge color based on context
+                        if (currentContext === 'work') {
+                            this.contextStatusBadge.style.background = '#ff9800';
+                        } else {
+                            this.contextStatusBadge.style.background = '#9c27b0';
+                        }
+                    }
+                    
+                    if (this.contextMode) {
+                        this.contextMode.textContent = currentContext.charAt(0).toUpperCase() + currentContext.slice(1);
+                        this.contextMode.style.color = currentContext === 'work' ? '#ff9800' : '#9c27b0';
+                    }
+                    
+                    if (this.detectedWorkflowPopup) {
+                        this.detectedWorkflowPopup.textContent = detectedWorkflow 
+                            ? detectedWorkflow.charAt(0).toUpperCase() + detectedWorkflow.slice(1)
+                            : 'None';
+                    }
+                    
+                    // Show smart whitelist info if there are active domains
+                    if (contextInfo.smartWhitelist && contextInfo.smartWhitelist.length > 0) {
+                        const activeDomains = contextInfo.smartWhitelist.filter(([domain, expiry]) => 
+                            Date.now() < expiry
+                        );
+                        
+                        if (activeDomains.length > 0 && this.smartWhitelistInfo) {
+                            this.smartWhitelistInfo.style.display = 'block';
+                            if (this.whitelistedDomains) {
+                                this.whitelistedDomains.textContent = activeDomains.length;
+                            }
+                        }
+                    }
+                    
+                    // Update last check time
+                    if (this.contextLastCheck) {
+                        const lastCheck = contextInfo.lastContextCheck;
+                        if (lastCheck && lastCheck > 0) {
+                            const date = new Date(lastCheck);
+                            const now = Date.now();
+                            const diffMs = now - lastCheck;
+                            const diffMinutes = Math.floor(diffMs / 60000);
+                            
+                            if (diffMinutes < 1) {
+                                this.contextLastCheck.textContent = 'Just now';
+                            } else if (diffMinutes < 60) {
+                                this.contextLastCheck.textContent = `${diffMinutes}m ago`;
+                            } else {
+                                this.contextLastCheck.textContent = date.toLocaleTimeString();
+                            }
+                        } else {
+                            this.contextLastCheck.textContent = 'Never';
+                        }
+                    }
+                    
+                    console.log('Context info loaded:', contextInfo);
+                } else if (this.contextAwareSection) {
+                    // Hide the section if context-aware features are disabled
+                    this.contextAwareSection.style.display = 'none';
+                }
+            }
+        } catch (error) {
+            console.debug('Failed to load context info:', error);
+            // Hide the context section if we can't load context info
+            if (this.contextAwareSection) {
+                this.contextAwareSection.style.display = 'none';
+            }
+        }
     }
 
     sendMessage(message) {
