@@ -167,6 +167,50 @@
     </div>
     
     <div class="section">
+        <h2>Network Optimization</h2>
+
+        <label>
+            <input type="checkbox" id="network-optimization-enabled">
+            Enable network optimization
+        </label>
+        <div class="description">Speed up navigation by pre-resolving DNS, pre-warming connections, and prefetching likely next pages</div>
+
+        <div class="subsection" style="margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 6px;">
+            <h3 style="margin: 0 0 15px 0; font-size: 16px; color: #333;">DNS Prefetching</h3>
+            <label>
+                <input type="checkbox" id="dns-prefetch-enabled">
+                Pre-resolve domain names for links on current page
+            </label>
+            <label>Maximum hosts to prefetch:</label>
+            <div class="range-container">
+                <input type="range" id="max-prefetch-hosts" min="0" max="10" value="5">
+                <span class="range-value" id="max-prefetch-hosts-value">5</span>
+            </div>
+        </div>
+
+        <div class="subsection" style="margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 6px;">
+            <h3 style="margin: 0 0 15px 0; font-size: 16px; color: #333;">Connection Pre-warming</h3>
+            <label>
+                <input type="checkbox" id="preconnect-enabled">
+                Establish early connections to likely next pages
+            </label>
+            <label>Top external domains to preconnect:</label>
+            <div class="range-container">
+                <input type="range" id="preconnect-top-n" min="0" max="5" value="2">
+                <span class="range-value" id="preconnect-top-n-value">2</span>
+            </div>
+        </div>
+
+        <div class="subsection" style="margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 6px;">
+            <h3 style="margin: 0 0 15px 0; font-size: 16px; color: #333;">Resource Preloading</h3>
+            <label>
+                <input type="checkbox" id="prefetch-on-hover-enabled">
+                Prefetch likely next pages on link hover
+            </label>
+        </div>
+    </div>
+
+    <div class="section">
         <h2>Notifications</h2>
         
         <label>

@@ -5,6 +5,13 @@ class FastBrowse {
     constructor() {
 this.settings = {
             autoSuspend: true,
+            // Network Optimization
+            networkOptimizationEnabled: true,
+            dnsPrefetchEnabled: true,
+            preconnectEnabled: true,
+            prefetchOnHoverEnabled: true,
+            maxPrefetchHosts: 5,
+            preconnectTopN: 2,
             // Memory compression for suspended tabs
             memoryCompressionEnabled: true,
             memoryCompressionAlgo: 'gzip', // 'gzip' | 'deflate' | 'none'
@@ -271,6 +278,17 @@ this.settings = {
         // Listen for tab updates
         chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
             this.onTabUpdated(tabId, changeInfo, tab);
+            // Inject network optimization script on completed loads
+            try {
+                if (changeInfo.status === 'complete' && this.settings.networkOptimizationEnabled) {
+                    if (tab && tab.url && tab.url.startsWith('http')) {
+                        chrome.scripting.executeScript({
+                            target: { tabId },
+                            files: ['src/content/network-optimization.js']
+                        }).catch(() => {});
+                    }
+                }
+            } catch (_) {}
             // Record domain when URL becomes available
             try {
                 if (changeInfo.url || (changeInfo.status === 'complete' && tab.url)) {

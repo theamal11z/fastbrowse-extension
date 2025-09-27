@@ -20,6 +20,15 @@ class OptionsManager {
             protectAudio: document.getElementById('protect-audio'),
             protectForms: document.getElementById('protect-forms'),
             showNotifications: document.getElementById('show-notifications'),
+            // Network optimization elements
+            networkOptimizationEnabled: document.getElementById('network-optimization-enabled'),
+            dnsPrefetchEnabled: document.getElementById('dns-prefetch-enabled'),
+            maxPrefetchHosts: document.getElementById('max-prefetch-hosts'),
+            maxPrefetchHostsValue: document.getElementById('max-prefetch-hosts-value'),
+            preconnectEnabled: document.getElementById('preconnect-enabled'),
+            preconnectTopN: document.getElementById('preconnect-top-n'),
+            preconnectTopNValue: document.getElementById('preconnect-top-n-value'),
+            prefetchOnHoverEnabled: document.getElementById('prefetch-on-hover-enabled'),
             memoryWarnings: document.getElementById('memory-warnings'),
             // Extension monitoring elements
             extensionMonitoring: document.getElementById('extension-monitoring'),
@@ -164,6 +173,32 @@ class OptionsManager {
             this.elements.referenceNoSuspendDuringWork.addEventListener('change', () => this.saveSettings());
         }
         
+        // Network optimization range updates
+        if (this.elements.maxPrefetchHosts) {
+            this.elements.maxPrefetchHosts.addEventListener('input', () => {
+                this.elements.maxPrefetchHostsValue.textContent = this.elements.maxPrefetchHosts.value;
+            });
+            this.elements.maxPrefetchHosts.addEventListener('change', () => this.saveSettings());
+        }
+        if (this.elements.preconnectTopN) {
+            this.elements.preconnectTopN.addEventListener('input', () => {
+                this.elements.preconnectTopNValue.textContent = this.elements.preconnectTopN.value;
+            });
+            this.elements.preconnectTopN.addEventListener('change', () => this.saveSettings());
+        }
+        if (this.elements.networkOptimizationEnabled) {
+            this.elements.networkOptimizationEnabled.addEventListener('change', () => this.saveSettings());
+        }
+        if (this.elements.dnsPrefetchEnabled) {
+            this.elements.dnsPrefetchEnabled.addEventListener('change', () => this.saveSettings());
+        }
+        if (this.elements.preconnectEnabled) {
+            this.elements.preconnectEnabled.addEventListener('change', () => this.saveSettings());
+        }
+        if (this.elements.prefetchOnHoverEnabled) {
+            this.elements.prefetchOnHoverEnabled.addEventListener('change', () => this.saveSettings());
+        }
+
         // Restoration settings range updates
         if (this.elements.liteRestorationThreshold) {
             this.elements.liteRestorationThreshold.addEventListener('input', () => {
@@ -349,6 +384,20 @@ class OptionsManager {
                 this.elements.protectForms.checked = settings.protectForms;
                 this.elements.showNotifications.checked = settings.showNotifications;
                 this.elements.memoryWarnings.checked = settings.memoryWarnings;
+
+                // Network optimization settings
+                if (this.elements.networkOptimizationEnabled) this.elements.networkOptimizationEnabled.checked = settings.networkOptimizationEnabled !== false;
+                if (this.elements.dnsPrefetchEnabled) this.elements.dnsPrefetchEnabled.checked = settings.dnsPrefetchEnabled !== false;
+                if (this.elements.maxPrefetchHosts) {
+                    this.elements.maxPrefetchHosts.value = settings.maxPrefetchHosts || 5;
+                    this.elements.maxPrefetchHostsValue.textContent = settings.maxPrefetchHosts || 5;
+                }
+                if (this.elements.preconnectEnabled) this.elements.preconnectEnabled.checked = settings.preconnectEnabled !== false;
+                if (this.elements.preconnectTopN) {
+                    this.elements.preconnectTopN.value = settings.preconnectTopN || 2;
+                    this.elements.preconnectTopNValue.textContent = settings.preconnectTopN || 2;
+                }
+                if (this.elements.prefetchOnHoverEnabled) this.elements.prefetchOnHoverEnabled.checked = settings.prefetchOnHoverEnabled !== false;
                 
                 // Memory compression settings
                 if (this.elements.memoryCompressionEnabled) {
@@ -469,6 +518,13 @@ class OptionsManager {
                 protectForms: this.elements.protectForms.checked,
                 showNotifications: this.elements.showNotifications.checked,
                 memoryWarnings: this.elements.memoryWarnings.checked,
+                // Network optimization
+                networkOptimizationEnabled: this.elements.networkOptimizationEnabled ? this.elements.networkOptimizationEnabled.checked : true,
+                dnsPrefetchEnabled: this.elements.dnsPrefetchEnabled ? this.elements.dnsPrefetchEnabled.checked : true,
+                maxPrefetchHosts: this.elements.maxPrefetchHosts ? parseInt(this.elements.maxPrefetchHosts.value) : 5,
+                preconnectEnabled: this.elements.preconnectEnabled ? this.elements.preconnectEnabled.checked : true,
+                preconnectTopN: this.elements.preconnectTopN ? parseInt(this.elements.preconnectTopN.value) : 2,
+                prefetchOnHoverEnabled: this.elements.prefetchOnHoverEnabled ? this.elements.prefetchOnHoverEnabled.checked : true,
                 // Memory compression
                 memoryCompressionEnabled: this.elements.memoryCompressionEnabled ? this.elements.memoryCompressionEnabled.checked : true,
                 snapshotScroll: this.elements.snapshotScroll ? this.elements.snapshotScroll.checked : true,

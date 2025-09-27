@@ -276,6 +276,24 @@ FastBrowse uses Chrome Extension Manifest V3 with the following components:
 - **Efficient Memory Monitoring**: Checks memory usage every 30 seconds (configurable)
 - **Clean Resource Management**: Properly disposes of timers and event listeners
 
+### Network Optimization Strategy
+
+1. **DNS Prefetching**
+   - Scans anchors on the current page to find frequently linked external domains
+   - Inserts `<link rel="dns-prefetch" href="//domain">` for up to N domains (configurable)
+2. **Connection Pre-warming**
+   - Adds `<link rel="preconnect" href="https://domain" crossorigin>` for the top external domains by frequency
+   - Helps reduce connection setup latency (DNS+TCP+TLS)
+3. **Resource Preloading**
+   - On link hover or pointer down, prefetches the target page via `<link rel="prefetch" as="document" href="...">`
+   - Smartly throttled and deduplicated to avoid waste
+
+Settings (Options → Network Optimization):
+- Enable Network Optimization
+- DNS Prefetching: toggle + maximum hosts to prefetch
+- Connection Pre-warming: toggle + number of top domains
+- Resource Preloading: toggle prefetch on hover
+
 ## 🔧 Development
 
 ### Prerequisites
