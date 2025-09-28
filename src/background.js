@@ -3534,6 +3534,15 @@ this.restorationStats.memoryOptimized++;
                 case 'ffOpenTroubleshooting':
                     try { await chrome.tabs.create({ url: 'about:support' }); sendResponse({ success: true }); } catch (e) { sendResponse({ success: false, error: e.message }); }
                     break;
+                case 'ffOpenAboutConfig':
+                    try { await chrome.tabs.create({ url: 'about:config' }); sendResponse({ success: true }); } catch (e) { sendResponse({ success: false, error: e.message }); }
+                    break;
+                case 'ffOpenAboutPerformance':
+                    try { await chrome.tabs.create({ url: 'about:performance' }); sendResponse({ success: true }); } catch (e) { sendResponse({ success: false, error: e.message }); }
+                    break;
+                case 'ffOpenAboutProcesses':
+                    try { await chrome.tabs.create({ url: 'about:processes' }); sendResponse({ success: true }); } catch (e) { sendResponse({ success: false, error: e.message }); }
+                    break;
                     
                 case 'getDebugInfo':
                     sendResponse({ 

@@ -1537,6 +1537,70 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const res = document.createElement('div'); res.id='ff-result'; res.style.fontSize='12px'; res.style.color='#555'; res.style.marginTop='6px'; ffSection.appendChild(res);
 
+    // Firefox-Only Performance Tweaks UI
+    const tweaks = document.createElement('div'); tweaks.style.marginTop='12px';
+    const h3t = document.createElement('h3'); h3t.textContent = 'Firefox-Only Performance Tweaks'; tweaks.appendChild(h3t);
+
+    const presetWrap = document.createElement('div');
+    presetWrap.style.display='grid'; presetWrap.style.gridTemplateColumns='repeat(auto-fit,minmax(240px,1fr))'; presetWrap.style.gap='8px';
+    const presets = [
+        { key:'conservative', label:'Conservative', lines:[
+            '// Keep things stable; minimal risk',
+            'privacy.resistFingerprinting = true (optional)',
+            'network.predictor.enabled = false',
+            'browser.sessionstore.interval = 30000',
+            'browser.cache.disk.enable = true',
+            'browser.cache.memory.capacity = -1'
+        ]},
+        { key:'balanced', label:'Balanced', lines:[
+            '// Good performance without big tradeoffs',
+            'network.http.max-persistent-connections-per-server = 6',
+            'network.predictor.enabled = false',
+            'browser.sessionstore.interval = 30000',
+            'gfx.webrender.all = true'
+        ]},
+        { key:'aggressive', label:'Aggressive', lines:[
+            '// Higher risk; test first',
+            'gfx.webrender.all = true',
+            'image.mem.decode_bytes_at_a_time = 32768',
+            'browser.sessionstore.max_tabs_undo = 10',
+            'dom.ipc.processCount.web = 8'
+        ]}
+    ];
+    const mkCard = (p)=>{
+        const card = document.createElement('div'); card.style.border='1px solid #eee'; card.style.borderRadius='6px'; card.style.padding='8px';
+        const title = document.createElement('div'); title.style.fontWeight='bold'; title.textContent = p.label; card.appendChild(title);
+        const pre = document.createElement('pre'); pre.style.whiteSpace='pre-wrap'; pre.style.fontSize='11px'; pre.textContent = p.lines.join('\n'); card.appendChild(pre);
+        const row = document.createElement('div'); row.style.display='flex'; row.style.gap='6px';
+        const btnCopy = document.createElement('button'); btnCopy.textContent='Copy preset'; btnCopy.addEventListener('click', async ()=>{ try { await navigator.clipboard.writeText(pre.textContent); res.textContent='Preset copied'; setTimeout(()=>res.textContent='',1500);} catch(_){ res.textContent='Copy failed'; }});
+        const btnUserJs = document.createElement('button'); btnUserJs.className='secondary'; btnUserJs.textContent='Copy user.js'; btnUserJs.addEventListener('click', async ()=>{
+            const userjs = p.lines.filter(l=>!l.startsWith('//')).map(line=>{
+                const m = line.match(/^([^=]+)=\s*(.+)$/); if (!m) return null; const k=m[1].trim(); let v=m[2].trim();
+                const type = /^-?\d+$/.test(v) ? 'int' : (/^(true|false)$/i.test(v) ? 'bool' : 'string');
+                if (type==='string') v = JSON.stringify(v);
+                return `user_pref(${JSON.stringify(k)}, ${type==='string'?v:(type==='bool'?v.toLowerCase():v)});`;
+            }).filter(Boolean).join('\n');
+            try { await navigator.clipboard.writeText(userjs); res.textContent='user.js copied'; setTimeout(()=>res.textContent='',1500);} catch(_){ res.textContent='Copy failed'; }
+        });
+        const btnAboutConfig = document.createElement('button'); btnAboutConfig.textContent='Open about:config'; btnAboutConfig.addEventListener('click', ()=>{ try { chrome.runtime.sendMessage({ action:'ffOpenAboutConfig' }, ()=>{}); } catch(_){} });
+        row.appendChild(btnCopy); row.appendChild(btnUserJs); row.appendChild(btnAboutConfig); card.appendChild(row);
+        return card;
+    };
+    presets.forEach(p=> presetWrap.appendChild(mkCard(p)));
+    tweaks.appendChild(presetWrap);
+
+    const manageRow = document.createElement('div'); manageRow.style.display='flex'; manageRow.style.gap='8px'; manageRow.style.marginTop='8px';
+    const btnAboutPerf = document.createElement('button'); btnAboutPerf.textContent='Open about:performance'; btnAboutPerf.addEventListener('click', ()=>{ try { chrome.runtime.sendMessage({ action:'ffOpenAboutPerformance' }, ()=>{});} catch(_){} });
+    const btnAboutProc = document.createElement('button'); btnAboutProc.textContent='Open about:processes'; btnAboutProc.addEventListener('click', ()=>{ try { chrome.runtime.sendMessage({ action:'ffOpenAboutProcesses' }, ()=>{});} catch(_){} });
+    manageRow.appendChild(btnAboutPerf); manageRow.appendChild(btnAboutProc);
+    tweaks.appendChild(manageRow);
+
+    const note = document.createElement('div'); note.style.fontSize='11px'; note.style.color='#666'; note.style.marginTop='6px';
+    note.textContent = 'Note: WebExtensions cannot change about:config automatically. Presets are provided for manual application; copy or use user.js. Use at your own risk.';
+    tweaks.appendChild(note);
+
+    ffSection.appendChild(tweaks);
+
     // Initialize toggle from settings
     this && this.elements; // hint to bundlers
     try { chrome.runtime.sendMessage({ action: 'getSettings' }, (r)=>{ try { cb.checked = !!(r && r.success && r.data && r.data.ffPreferAltSuspend); } catch(_){} }); } catch(_){}
