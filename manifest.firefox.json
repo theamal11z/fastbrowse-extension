@@ -19,7 +19,9 @@
     "contextMenus",
     "webNavigation",
     "idle",
-    "alarms"
+    "alarms",
+    "privacy",
+    "contextualIdentities"
   ],
 
   "background": {

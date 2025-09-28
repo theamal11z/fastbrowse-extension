@@ -19,6 +19,8 @@
     "webNavigation",
     "idle",
     "alarms",
+    "privacy",
+    "contextualIdentities",
     "<all_urls>"
   ],
 

@@ -81,8 +81,11 @@ this.settings = {
             prefetchOnHoverEnabled: true,
             maxPrefetchHosts: 5,
             preconnectTopN: 2,
-            // Memory compression for suspended tabs
+        // Memory compression for suspended tabs
             memoryCompressionEnabled: true,
+            // Container policies (Firefox contextual identities)
+            containerPolicies: {}, // { [containerName or cookieStoreId]: { delayMultiplier?: number, neverSuspend?: boolean } }
+            containerBudgets: {} // { [containerName or cookieStoreId]: { maxUnsuspended?: number } }
             memoryCompressionAlgo: 'gzip', // 'gzip' | 'deflate' | 'none'
             snapshotScroll: true,
             snapshotForms: true,
@@ -298,6 +301,13 @@ this.settings = {
                 this.settings.extensionMonitoring = false;
                 this.settings.extensionSuggestions = false;
                 try { await chrome.storage.sync.set({ extensionMonitoring: false, extensionSuggestions: false }); } catch (_) {}
+            }
+        } catch (_) {}
+
+        // Initialize Firefox-specific integrations
+        try {
+            if (this.settings.firefoxOptimizations) {
+                await this.initFirefoxIntegration();
             }
         } catch (_) {}
         // Load learned leak domains
@@ -1013,6 +1023,14 @@ this.restorationStats.memoryOptimized++;
                 delayMs = Math.round(delayMs * mult);
             }
 
+            // Container-aware override (Firefox contextual identities)
+            try {
+                const policy = this.getContainerPolicyForTab(tab);
+                if (policy && policy.neverSuspend) return null;
+                if (policy && typeof policy.delayMultiplier === 'number' && isFinite(policy.delayMultiplier) && policy.delayMultiplier > 0) {
+                    delayMs = Math.round(delayMs * policy.delayMultiplier);
+                }
+            } catch (_) {}
             return delayMs;
         } catch (e) {
             // On error, fall back to default delay
@@ -1517,9 +1535,36 @@ this.restorationStats.memoryOptimized++;
                 }
             }
             
-            // Sort by last accessed (oldest first) and suspend up to 5 tabs
-            unprotectedTabs
-                .sort((a, b) => (a.lastAccessed || 0) - (b.lastAccessed || 0))
+            // Container-aware budget enforcement: prefer suspending from containers over budget
+            const overBudgetIds = new Set();
+            try {
+                const budget = this.settings.containerBudgets || {};
+                if (budget && Object.keys(budget).length > 0) {
+                    const counts = new Map();
+                    for (const t of unprotectedTabs) {
+                        const key = this.getContainerKeyForTab(t) || 'default';
+                        counts.set(key, (counts.get(key) || 0) + (t.discarded ? 0 : 1));
+                    }
+                    for (const [key, cfg] of Object.entries(budget)) {
+                        const max = (cfg && cfg.maxUnsuspended) || 0;
+                        if (max > 0) {
+                            const c = counts.get(key) || 0;
+                            if (c > max) overBudgetIds.add(key);
+                        }
+                    }
+                }
+            } catch (_) {}
+
+            const prioritized = unprotectedTabs.slice().sort((a, b) => {
+                const ka = this.getContainerKeyForTab(a) || 'default';
+                const kb = this.getContainerKeyForTab(b) || 'default';
+                const oa = overBudgetIds.has(ka) ? -1 : 0;
+                const ob = overBudgetIds.has(kb) ? -1 : 0;
+                if (oa !== ob) return oa - ob;
+                return (a.lastAccessed || 0) - (b.lastAccessed || 0);
+            });
+
+            prioritized
                 .slice(0, 5)
                 .forEach(tab => this.suspendTab(tab.id));
                 
@@ -1586,6 +1631,114 @@ this.restorationStats.memoryOptimized++;
         }
     }
     
+    // Firefox integration helpers
+    async initFirefoxIntegration() {
+        try {
+            if (typeof browser === 'undefined' || !browser.contextualIdentities) return;
+            const identities = await browser.contextualIdentities.query({});
+            this.ffContainers = new Map();
+            identities.forEach(ci => this.ffContainers.set(ci.cookieStoreId, ci));
+        } catch (_) {}
+        await this.loadFirefoxPrivacyContext();
+    }
+
+    async loadFirefoxPrivacyContext() {
+        try {
+            const tp = await browser.privacy.websites.trackingProtectionMode.get({});
+            const rfp = await browser.privacy.websites.resistFingerprinting.get({});
+            let pred = { value: true };
+            try { pred = await browser.privacy.network.networkPredictionEnabled.get({}); } catch (_) {}
+            this.firefoxPrivacy = { trackingProtectionMode: tp && tp.value, resistFingerprinting: rfp && rfp.value, networkPredictionEnabled: pred && pred.value };
+            // Adjust our features conservatively when privacy hardening is on
+            let changed = false;
+            if (this.firefoxPrivacy && this.firefoxPrivacy.resistFingerprinting) {
+                if (this.settings.speedDashboardEnabled) { this.settings.speedDashboardEnabled = false; changed = true; }
+                if (this.settings.bottlenecksEnabled) { this.settings.bottlenecksEnabled = false; changed = true; }
+            }
+            if (this.firefoxPrivacy && this.firefoxPrivacy.networkPredictionEnabled === false) {
+                if (this.settings.prefetchOnHoverEnabled) { this.settings.prefetchOnHoverEnabled = false; changed = true; }
+                if (this.settings.preconnectEnabled) { this.settings.preconnectEnabled = false; changed = true; }
+            }
+            if (changed) { try { await chrome.storage.sync.set(this.settings); } catch (_) {} }
+        } catch (_) {}
+    }
+
+    getContainerKeyForTab(tab) {
+        try {
+            if (!tab) return null;
+            const id = tab.cookieStoreId || null;
+            if (id) return id;
+            return null;
+        } catch (_) { return null; }
+    }
+
+    getContainerPolicyForTab(tab) {
+        try {
+            const map = this.settings.containerPolicies || {};
+            const id = this.getContainerKeyForTab(tab);
+            if (id && map[id]) return map[id];
+            // Try by name if available
+            if (id && this.ffContainers && this.ffContainers.has(id)) {
+                const name = (this.ffContainers.get(id).name || '').toLowerCase();
+                for (const [key, val] of Object.entries(map)) {
+                    if (key.toLowerCase() === name) return val;
+                }
+            }
+            return null;
+        } catch (_) { return null; }
+    }
+
+    async suggestContainerForTab(tab) {
+        try {
+            if (!tab || !tab.url) return null;
+            if (!this.ffContainers || this.ffContainers.size === 0) return null;
+            const u = new URL(tab.url);
+            const host = u.hostname.toLowerCase();
+            const nameMatch = (needle) => {
+                for (const ci of this.ffContainers.values()) {
+                    if ((ci.name || '').toLowerCase().includes(needle)) return ci;
+                }
+                return null;
+            };
+            // Heuristics
+            if (/github|gitlab|bitbucket|stack(over|)flow|docs|developer|atlassian/i.test(host)) {
+                const t = nameMatch('work'); if (t) return { target: t, reason: 'Work-related domain' };
+            }
+            if (/facebook|instagram|twitter|x\.com|tiktok|reddit/i.test(host)) {
+                const t = nameMatch('social'); if (t) return { target: t, reason: 'Social media domain' };
+            }
+            if (/bank|paypal|stripe|finance|invest|secure/i.test(host)) {
+                const t = nameMatch('bank') || nameMatch('finance') || nameMatch('secure'); if (t) return { target: t, reason: 'Financial domain' };
+            }
+            if (/mail|outlook|gmail|yahoo/i.test(host)) {
+                const t = nameMatch('mail') || nameMatch('personal'); if (t) return { target: t, reason: 'Mail/Personal domain' };
+            }
+            return null;
+        } catch (_) { return null; }
+    }
+
+    async getContainerSuggestions() {
+        try {
+            const tabs = await chrome.tabs.query({});
+            const out = [];
+            for (const tab of tabs) {
+                const sug = await this.suggestContainerForTab(tab);
+                if (sug && (!tab.cookieStoreId || tab.cookieStoreId !== sug.target.cookieStoreId)) {
+                    out.push({ tabId: tab.id, title: tab.title, url: tab.url, current: tab.cookieStoreId || null, recommendedId: sug.target.cookieStoreId, recommendedName: sug.target.name, reason: sug.reason });
+                }
+            }
+            return out;
+        } catch (_) { return []; }
+    }
+
+    async openTabInContainer(tabId, cookieStoreId) {
+        try {
+            const tab = await chrome.tabs.get(tabId);
+            const created = await chrome.tabs.create({ url: tab.url, index: tab.index + 1, windowId: tab.windowId, cookieStoreId });
+            return { newTabId: created.id };
+        } catch (e) { return { error: e.message }; }
+    }
+
     // Helper method for safe tab debugging
     getTabDescription(tab) {
         if (!tab) return 'null tab';
@@ -3295,7 +3448,28 @@ this.restorationStats.memoryOptimized++;
                     sendResponse({ success: true, data: priorities });
                     break;
                     
-                    
+                case 'getContainers':
+                    try {
+                        const arr = [];
+                        if (this.ffContainers) {
+                            for (const ci of this.ffContainers.values()) arr.push({ id: ci.cookieStoreId, name: ci.name, color: ci.color, icon: ci.icon });
+                        }
+                        sendResponse({ success: true, data: arr });
+                    } catch (e) { sendResponse({ success: false, error: e.message }); }
+                    break;
+                case 'getContainerSuggestions':
+                    try {
+                        const sug = await this.getContainerSuggestions();
+                        sendResponse({ success: true, data: sug });
+                    } catch (e) { sendResponse({ success: false, error: e.message }); }
+                    break;
+                case 'openTabInContainer':
+                    try {
+                        const r = await this.openTabInContainer(request.tabId, request.cookieStoreId);
+                        sendResponse({ success: !r.error, data: r });
+                    } catch (e) { sendResponse({ success: false, error: e.message }); }
+                    break;
+                
                 case 'updateSettings':
                     console.log('Updating settings:', request.settings);
                     this.settings = { ...this.settings, ...request.settings };

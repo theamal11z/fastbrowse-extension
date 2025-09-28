@@ -1530,6 +1530,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnZombie = document.createElement('button'); btnZombie.textContent = 'Check Zombie Tabs'; actions.appendChild(btnZombie);
     const btnCache = document.createElement('button'); btnCache.textContent = 'Clear HTTP Cache'; actions.appendChild(btnCache);
     const btnIDB = document.createElement('button'); btnIDB.textContent = 'Optimize IndexedDB (recent)'; actions.appendChild(btnIDB);
+    const btnSuggestContainers = document.createElement('button'); btnSuggestContainers.textContent = 'Suggest Containers'; actions.appendChild(btnSuggestContainers);
     const btnProfiles = document.createElement('button'); btnProfiles.textContent = 'Open About Profiles'; actions.appendChild(btnProfiles);
     const btnSupport = document.createElement('button'); btnSupport.className='secondary'; btnSupport.textContent = 'Open Troubleshooting'; actions.appendChild(btnSupport);
     ffSection.appendChild(actions);
@@ -1562,6 +1563,17 @@ document.addEventListener('DOMContentLoaded', () => {
     btnIDB.addEventListener('click', ()=>{
         res.textContent = 'Optimizing IndexedDB...';
         try { chrome.runtime.sendMessage({ action: 'ffProfileClearIndexedDBRecent' }, (r)=>{ const c=r&&r.success && r.data? r.data.count:0; res.textContent = r&&r.success? `Optimized ${c} origin(s)`:'Failed'; }); } catch(_) { res.textContent='Failed'; }
+    });
+    btnSuggestContainers.addEventListener('click', ()=>{
+        res.textContent = 'Analyzing containers...';
+        try { chrome.runtime.sendMessage({ action: 'getContainerSuggestions' }, (r)=>{
+            if (r && r.success) {
+                const n = Array.isArray(r.data) ? r.data.length : 0;
+                res.textContent = n === 0 ? 'No container suggestions.' : `Container suggestions: ${n}`;
+            } else {
+                res.textContent = 'Failed to analyze containers';
+            }
+        }); } catch(_) { res.textContent = 'Failed'; }
     });
     btnProfiles.addEventListener('click', ()=>{ try { chrome.runtime.sendMessage({ action: 'ffOpenAboutProfiles' }, ()=>{}); } catch(_){} });
     btnSupport.addEventListener('click', ()=>{ try { chrome.runtime.sendMessage({ action: 'ffOpenTroubleshooting' }, ()=>{}); } catch(_){} });
