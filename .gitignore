@@ -21,6 +21,7 @@ build/
 *.swp
 *.swo
 *~
+test/
 
 # Operating system files
 .DS_Store
@@ -57,8 +58,5 @@ coverage/
 
 # Prettier cache
 .prettiercache
+// eslint-disable-next-line  // 12:17:34
 
-hb.html
-hb.js
-WARP.md
-CHANGELOG.md

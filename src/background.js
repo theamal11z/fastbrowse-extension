@@ -76,6 +76,14 @@ this.settings = {
             protectForms: true,
             showNotifications: true, // Enable notifications by default for debugging
             memoryWarnings: true,
+            // Notification tuning
+            notificationCooldownSeconds: 120, // global minimum cooldown between identical notifications
+            bottleneckNotify: true,
+            bottleneckCooldownMinutes: 10,
+            leakNotify: true,
+            leakCooldownMinutes: 15,
+            focusNotify: true,
+            suspendNotify: true,
             // Smart memory alerts
             memorySmartMode: true,
             memoryMinUnsuspendedTabs: 5,
@@ -675,8 +683,8 @@ this.settings = {
                     const updatedTab = await chrome.tabs.get(tabId);
                     if (updatedTab.discarded) {
                         console.log(`✓ Tab ${tabId} successfully suspended: ${tab.title || 'Unknown'}`);
-                        if (this.settings.showNotifications) {
-                            this.showNotification(`Tab suspended: ${tab.title || 'Unknown'}`);
+                        if (this.settings.showNotifications && this.settings.suspendNotify !== false) {
+                            this.showNotification(`Tab suspended: ${tab.title || 'Unknown'}`, { category: 'tab_suspended', variant: 'discard' });
                         }
                     } else {
                         console.warn(`⚠ Tab ${tabId} was not discarded by Chrome API, trying alternative method`);
@@ -746,8 +754,8 @@ this.settings = {
             await chrome.tabs.update(tabId, { url: suspendedUrl });
 
             console.log(`✓ Tab ${tabId} suspended using alternative method (suspended.html)`);
-            if (this.settings.showNotifications) {
-                this.showNotification(`Tab suspended (alt): ${originalTab.title || 'Unknown'}`);
+            if (this.settings.showNotifications && this.settings.suspendNotify !== false) {
+                this.showNotification(`Tab suspended (alt): ${originalTab.title || 'Unknown'}`, { category: 'tab_suspended', variant: 'alt' });
             }
         } catch (error) {
             // Handle case where tab was closed during the process
@@ -1294,7 +1302,7 @@ this.restorationStats.memoryOptimized++;
             // Progress notification
             if (this.settings.showNotifications && chunks.length > 1) {
                 const progress = Math.round((processed / prioritizedTabs.length) * 100);
-                this.showNotification(`Restoration progress: ${progress}% (${processed}/${prioritizedTabs.length} tabs)`);
+                this.showNotification(`Restoration progress: ${progress}% (${processed}/${prioritizedTabs.length} tabs)`, { category: 'restoration', variant: 'progress' });
             }
             
             // Delay before next chunk (except for last chunk)
@@ -1453,8 +1461,8 @@ this.restorationStats.memoryOptimized++;
                 }
             }
             
-            if (this.settings.memoryWarnings) {
-                this.showNotification(`High memory usage detected: ${usagePercent.toFixed(1)}%`);
+            if (this.settings.memoryWarnings && this.settings.showNotifications) {
+                this.showNotification(`High memory usage detected: ${usagePercent.toFixed(1)}%`, { category: 'memory', variant: 'high_usage' });
             }
             
             // Suspend some tabs to free memory
@@ -1488,32 +1496,49 @@ this.restorationStats.memoryOptimized++;
     
     showNotification(message, options = {}) {
         try {
-            // Create a unique key for this notification type
-            const notificationKey = `${message.substring(0, 30)}_${options.type || 'basic'}`;
-            
-            // Check for cooldown - don't show same notification within 30 seconds
             const now = Date.now();
-            const cooldownTime = 30000; // 30 seconds
-            
+            // Compose a stable key using category/site/variant if provided to avoid bypass by dynamic text
+            const category = options.category || 'general';
+            const site = options.site || '';
+            const variant = options.variant || '';
+            const providedKey = options.key || '';
+            const notificationKey = providedKey || `${category}|${site}|${variant}` || `${message.substring(0, 30)}_${options.type || 'basic'}`;
+
+            // Determine cooldown: use explicit override, else category-specific, else global
+            const globalCd = Math.max(5, Number(this.settings.notificationCooldownSeconds || 30)) * 1000;
+            let cooldownTime = Number(options.cooldownMs || 0);
+            if (!cooldownTime) {
+                if (category === 'bottleneck') {
+                    cooldownTime = Math.max(1, Number(this.settings.bottleneckCooldownMinutes || 10)) * 60 * 1000;
+                } else if (category === 'memory_leak') {
+                    cooldownTime = Math.max(1, Number(this.settings.leakCooldownMinutes || 15)) * 60 * 1000;
+                } else if (category === 'focus_mode') {
+                    cooldownTime = Math.max(globalCd, 60 * 1000);
+                } else {
+                    cooldownTime = globalCd;
+                }
+            }
+
             if (this.notificationCooldowns.has(notificationKey)) {
                 const lastShown = this.notificationCooldowns.get(notificationKey);
                 if (now - lastShown < cooldownTime) {
-                    console.debug(`Notification "${message}" suppressed due to cooldown`);
+                    console.debug(`Notification suppressed due to cooldown [key=${notificationKey}]`);
                     return;
                 }
             }
-            
+
             // Set cooldown
             this.notificationCooldowns.set(notificationKey, now);
-            
+
             const notificationOptions = {
                 type: 'basic',
                 iconUrl: chrome.runtime.getURL('assets/icon48.png'),
                 title: 'FastBrowse',
                 message: message,
-                ...options
+                // strip internal keys from options
+                ...Object.fromEntries(Object.entries(options).filter(([k]) => !['key','cooldownMs','category','site','variant'].includes(k)))
             };
-            
+
             // Remove iconUrl from buttons if present, as it causes issues
             if (notificationOptions.buttons) {
                 notificationOptions.buttons = notificationOptions.buttons.map(button => {
@@ -1521,16 +1546,16 @@ this.restorationStats.memoryOptimized++;
                     return cleanButton;
                 });
             }
-            
+
             chrome.notifications.create(notificationOptions, (notificationId) => {
                 if (chrome.runtime.lastError) {
                     console.debug('Notification error:', chrome.runtime.lastError);
                 } else {
                     console.log('Notification created:', notificationId);
                     this.activeNotifications.add(notificationId);
-                    
+
                     // Auto-clear notification after 5 seconds if not requiring interaction
-                    if (!options.requireInteraction) {
+                    if (!notificationOptions.requireInteraction) {
                         setTimeout(() => {
                             chrome.notifications.clear(notificationId, () => {
                                 this.activeNotifications.delete(notificationId);
@@ -2573,10 +2598,11 @@ this.restorationStats.memoryOptimized++;
             // Notify about high-priority suggestions
             const urgentSuggestions = suggestions.filter(s => s.severity === 'high');
             
-            if (urgentSuggestions.length > 0 && this.settings.extensionNotifications) {
+            if (urgentSuggestions.length > 0 && this.settings.extensionNotifications && this.settings.showNotifications) {
                 const extensionNames = urgentSuggestions.map(s => s.extensionName).join(', ');
                 this.showNotification(
-                    `Memory Alert: Consider disabling high-memory extensions: ${extensionNames}`
+                    `Memory Alert: Consider disabling high-memory extensions: ${extensionNames}`,
+                    { category: 'extensions', variant: 'high_memory' }
                 );
             }
             
@@ -2716,7 +2742,7 @@ this.restorationStats.memoryOptimized++;
                 await this.suspendTab(t.id);
             }
             if (toSuspend.length > 0 && this.settings.showNotifications) {
-                this.showNotification(`⚡ Pre‑emptive memory save: suspended ${toSuspend.length} tab(s) to avoid spike`);
+                this.showNotification(`⚡ Pre‑emptive memory save: suspended ${toSuspend.length} tab(s) to avoid spike`, { category: 'preemptive' });
             }
         } catch (e) {
             console.debug('preemptiveSuspend failed:', e);
@@ -2744,7 +2770,10 @@ this.restorationStats.memoryOptimized++;
             if (next >= (this.settings.leakDomainThreshold || 3)) {
                 if (!this.leakProneDomains.has(domain)) {
                     this.leakProneDomains.add(domain);
-                    this.showNotification(`🧠 Learned memory‑heavy site: ${domain}. Will suspend earlier when needed.`);
+                    if (this.settings.showNotifications) {
+                        this.showNotification(`🧠 Learned memory‑heavy site: ${domain}. Will suspend earlier when needed.`,
+                            { category: 'learned_domain', site: domain, cooldownMs: 24 * 60 * 60 * 1000 });
+                    }
                     // Persist
                     chrome.storage.local.set({ fastbrowse_leak_domains: Array.from(this.leakProneDomains) });
                 }
@@ -2956,8 +2985,8 @@ this.restorationStats.memoryOptimized++;
             }
             
             // Show notification
-            if (this.settings.showNotifications) {
-                this.showNotification('🎯 Focus Mode Enabled - Distractions removed');
+            if (this.settings.showNotifications && this.settings.focusNotify !== false) {
+                this.showNotification('🎯 Focus Mode Enabled - Distractions removed', { category: 'focus_mode', variant: 'enabled' });
             }
 
             // Start focus music if configured
@@ -3001,9 +3030,9 @@ this.restorationStats.memoryOptimized++;
             await this.stopFocusMusic();
 
             // Show notification
-            if (this.settings.showNotifications) {
+            if (this.settings.showNotifications && this.settings.focusNotify !== false) {
                 const timeActiveMinutes = Math.round(this.focusModeStats.timeActive / 60000);
-                this.showNotification(`✨ Focus Mode Disabled - Active for ${timeActiveMinutes} minutes`);
+                this.showNotification(`✨ Focus Mode Disabled - Active for ${timeActiveMinutes} minutes`, { category: 'focus_mode', variant: 'disabled' });
             }
             
         } catch (error) {
@@ -3146,6 +3175,7 @@ this.restorationStats.memoryOptimized++;
                 this.showNotification(
                     `💡 Focus Tip: Install ${topMissing.name} for better distraction blocking`,
                     {
+                        category: 'focus_tip',
                         buttons: [{ title: 'Install' }],
                         eventTime: Date.now() + 5000,
                         requireInteraction: true
@@ -3941,14 +3971,15 @@ this.restorationStats.memoryOptimized++;
                         await chrome.storage.local.set({ [key]: arr });
                     }
                 } catch (_) {}
-                if (this.settings.showNotifications) {
+                if (this.settings.showNotifications && this.settings.bottleneckNotify !== false) {
                     const host = (()=>{ try { return new URL(data.url).hostname; } catch(_) { return 'this page'; } })();
                     const parts = findings.map(f => {
                         if (f.type === 'slow-resources') return `${f.heavy.length} slow third‑party script(s)`;
                         if (f.type === 'cpu-hog') return `Long tasks ${f.total}ms/${(f.windowMs/1000)}s`;
                         return f.type;
                     });
-                    this.showNotification(`⚠️ Bottlenecks on ${host}: ${parts.join(', ')}`);
+                    this.showNotification(`⚠️ Bottlenecks on ${host}: ${parts.join(', ')}`,
+                        { category: 'bottleneck', site: host });
                 }
             }
         } catch (e) {
@@ -3969,7 +4000,10 @@ this.restorationStats.memoryOptimized++;
             const activeTabs = await chrome.tabs.query({ active: true, currentWindow: true });
             if (activeTabs && activeTabs[0] && activeTabs[0].url) {
                 const host = new URL(activeTabs[0].url).hostname;
-                this.showNotification(`🧪 Memory leak suspected: rising usage while on ${host}`);
+                if (this.settings.showNotifications && this.settings.leakNotify !== false) {
+                    this.showNotification(`🧪 Memory leak suspected: rising usage while on ${host}`,
+                        { category: 'memory_leak', site: host });
+                }
             }
         } catch (e) { /* ignore */ }
     }

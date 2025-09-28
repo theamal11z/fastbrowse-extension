@@ -20,6 +20,14 @@ class OptionsManager {
             protectAudio: document.getElementById('protect-audio'),
             protectForms: document.getElementById('protect-forms'),
             showNotifications: document.getElementById('show-notifications'),
+            notifyBottlenecks: document.getElementById('notify-bottlenecks'),
+            notifyMemoryLeaks: document.getElementById('notify-memory-leaks'),
+            notificationCooldownSeconds: document.getElementById('notification-cooldown-seconds'),
+            notificationCooldownSecondsValue: document.getElementById('notification-cooldown-seconds-value'),
+            bottleneckCooldownMinutes: document.getElementById('bottleneck-cooldown-minutes'),
+            bottleneckCooldownMinutesValue: document.getElementById('bottleneck-cooldown-minutes-value'),
+            leakCooldownMinutes: document.getElementById('leak-cooldown-minutes'),
+            leakCooldownMinutesValue: document.getElementById('leak-cooldown-minutes-value'),
             // Network optimization elements
             networkOptimizationEnabled: document.getElementById('network-optimization-enabled'),
             dnsPrefetchEnabled: document.getElementById('dns-prefetch-enabled'),
@@ -262,6 +270,26 @@ class OptionsManager {
         if (this.elements.webglAntialias) this.elements.webglAntialias.addEventListener('change', () => this.saveSettings());
         if (this.elements.webglPreserve) this.elements.webglPreserve.addEventListener('change', () => this.saveSettings());
 
+        // Notification range updates
+        if (this.elements.notificationCooldownSeconds) {
+            this.elements.notificationCooldownSeconds.addEventListener('input', () => {
+                this.elements.notificationCooldownSecondsValue.textContent = this.elements.notificationCooldownSeconds.value;
+            });
+            this.elements.notificationCooldownSeconds.addEventListener('change', () => this.saveSettings());
+        }
+        if (this.elements.bottleneckCooldownMinutes) {
+            this.elements.bottleneckCooldownMinutes.addEventListener('input', () => {
+                this.elements.bottleneckCooldownMinutesValue.textContent = this.elements.bottleneckCooldownMinutes.value;
+            });
+            this.elements.bottleneckCooldownMinutes.addEventListener('change', () => this.saveSettings());
+        }
+        if (this.elements.leakCooldownMinutes) {
+            this.elements.leakCooldownMinutes.addEventListener('input', () => {
+                this.elements.leakCooldownMinutesValue.textContent = this.elements.leakCooldownMinutes.value;
+            });
+            this.elements.leakCooldownMinutes.addEventListener('change', () => this.saveSettings());
+        }
+
         // Network optimization range updates
         if (this.elements.maxPrefetchHosts) {
             this.elements.maxPrefetchHosts.addEventListener('input', () => {
@@ -413,6 +441,10 @@ class OptionsManager {
             this.saveSettings();
         });
 
+        // Notification toggles auto-save
+        if (this.elements.notifyBottlenecks) this.elements.notifyBottlenecks.addEventListener('change', () => this.saveSettings());
+        if (this.elements.notifyMemoryLeaks) this.elements.notifyMemoryLeaks.addEventListener('change', () => this.saveSettings());
+
         // Restore defaults
         if (this.elements.resetDefaults) {
             this.elements.resetDefaults.addEventListener('click', () => this.applyDefaultsAndSave());
@@ -559,6 +591,13 @@ class OptionsManager {
                 this.elements.protectForms.checked = settings.protectForms;
                 this.elements.showNotifications.checked = settings.showNotifications;
                 this.elements.memoryWarnings.checked = settings.memoryWarnings;
+
+                // Notification tuning
+                if (this.elements.notifyBottlenecks) this.elements.notifyBottlenecks.checked = settings.bottleneckNotify !== false;
+                if (this.elements.notifyMemoryLeaks) this.elements.notifyMemoryLeaks.checked = settings.leakNotify !== false;
+                if (this.elements.notificationCooldownSeconds) { this.elements.notificationCooldownSeconds.value = settings.notificationCooldownSeconds || 120; this.elements.notificationCooldownSecondsValue.textContent = settings.notificationCooldownSeconds || 120; }
+                if (this.elements.bottleneckCooldownMinutes) { this.elements.bottleneckCooldownMinutes.value = settings.bottleneckCooldownMinutes || 10; this.elements.bottleneckCooldownMinutesValue.textContent = settings.bottleneckCooldownMinutes || 10; }
+                if (this.elements.leakCooldownMinutes) { this.elements.leakCooldownMinutes.value = settings.leakCooldownMinutes || 15; this.elements.leakCooldownMinutesValue.textContent = settings.leakCooldownMinutes || 15; }
 
                 // Network optimization settings
                 if (this.elements.networkOptimizationEnabled) this.elements.networkOptimizationEnabled.checked = settings.networkOptimizationEnabled !== false;
@@ -802,6 +841,12 @@ class OptionsManager {
                 extensionMemoryThreshold: parseInt(this.elements.extensionMemoryThreshold.value),
                 extensionSuggestions: this.elements.extensionSuggestions.checked,
                 extensionNotifications: this.elements.extensionNotifications.checked,
+                // Notifications tuning
+                bottleneckNotify: this.elements.notifyBottlenecks ? this.elements.notifyBottlenecks.checked : true,
+                leakNotify: this.elements.notifyMemoryLeaks ? this.elements.notifyMemoryLeaks.checked : true,
+                notificationCooldownSeconds: this.elements.notificationCooldownSeconds ? parseInt(this.elements.notificationCooldownSeconds.value) : 120,
+                bottleneckCooldownMinutes: this.elements.bottleneckCooldownMinutes ? parseInt(this.elements.bottleneckCooldownMinutes.value) : 10,
+                leakCooldownMinutes: this.elements.leakCooldownMinutes ? parseInt(this.elements.leakCooldownMinutes.value) : 15,
                 // Focus mode settings
                 focusMode: this.elements.focusMode.checked,
                 focusAutoSuspend: this.elements.focusAutoSuspend.checked,
