@@ -1,0 +1,42 @@
+{
+  "name": "fastbrowse-extension",
+  "version": "1.1.0",
+  "description": "Lightweight Chrome extension to reduce memory usage through smart tab management",
+  "main": "src/background.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "lint": "eslint src/**/*.js",
+    "format": "prettier --write src/**/*.{js,html,css}",
+    "build": "npm run lint && npm run format",
+    "dev": "echo \"Load extension in Chrome from chrome://extensions/\"",
+    "zip": "zip -r fastbrowse-extension.zip . -x node_modules/\\* .git/\\* *.zip",
+    "build:firefox": "node scripts/build-firefox.js",
+    "dev:firefox": "npm run build:firefox && npx web-ext run --source-dir dist-firefox",
+    "zip:firefox": "npm run build:firefox && (cd dist-firefox && zip -r ../fastbrowse-firefox.zip . -x node_modules/\\* .git/\\* *.zip)"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yourusername/fastbrowse-extension.git"
+  },
+  "keywords": [
+    "chrome-extension",
+    "memory",
+    "optimization",
+    "tab-management",
+    "performance",
+    "browser"
+  ],
+  "author": "Your Name <your.email@example.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/yourusername/fastbrowse-extension/issues"
+  },
+  "homepage": "https://github.com/yourusername/fastbrowse-extension#readme",
+  "devDependencies": {
+    "eslint": "^8.0.0",
+    "prettier": "^2.0.0"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}

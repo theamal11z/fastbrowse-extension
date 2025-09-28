@@ -1,0 +1,1134 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>FastBrowse</title>
+    <style>
+        body {
+            width: 350px;
+            padding: 16px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 0;
+        }
+        
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+            border-bottom: 1px solid #e0e0e0;
+            padding-bottom: 12px;
+        }
+        
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .icon-btn {
+            background: transparent !important;
+            border: 1px solid #e0e0e0 !important;
+            color: #666 !important;
+            padding: 4px 6px !important;
+            margin: 0 !important;
+            font-size: 14px !important;
+            border-radius: 4px !important;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .icon-btn:hover {
+            background: #f5f5f5 !important;
+            border-color: #ccc !important;
+        }
+        
+        .icon-btn.active {
+            background: #2196F3 !important;
+            border-color: #1976D2 !important;
+            color: white !important;
+        }
+        
+        .logo {
+            width: 24px;
+            height: 24px;
+            margin-right: 8px;
+            background: linear-gradient(45deg, #4CAF50, #2196F3);
+            border-radius: 4px;
+        }
+        
+        h1 {
+            margin: 0;
+            font-size: 18px;
+            color: #333;
+        }
+        
+        .memory-info {
+            background: #f5f5f5;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 16px;
+        }
+        
+        .memory-usage {
+            font-size: 14px;
+            color: #666;
+        }
+        
+        .controls {
+            margin-bottom: 16px;
+        }
+        
+        button {
+            background: #2196F3;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 8px;
+            margin-bottom: 8px;
+        }
+        
+        button:hover {
+            background: #1976D2;
+        }
+        
+        button.secondary {
+            background: #666;
+        }
+        
+        button.secondary:hover {
+            background: #555;
+        }
+        
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        /* Toasts */
+        .toast-container {
+            position: fixed;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 2000;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            align-items: center;
+            pointer-events: none;
+        }
+        .toast {
+            pointer-events: auto;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            color: #fff;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            min-width: 200px;
+            justify-content: center;
+        }
+        .toast.info { background: #2196F3; }
+        .toast.success { background: #4CAF50; }
+        .toast.error { background: #f44336; }
+        .toast .toast-close {
+            background: transparent;
+            border: none;
+            color: #fff;
+            cursor: pointer;
+            font-size: 14px;
+            line-height: 1;
+        }
+        
+        .tab-list {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        .tab-item {
+            display: flex;
+            align-items: center;
+            padding: 8px;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            margin-bottom: 4px;
+            font-size: 12px;
+        }
+        
+        .tab-item.suspended {
+            opacity: 0.6;
+            background: #fafafa;
+        }
+        
+        .tab-icon {
+            width: 16px;
+            height: 16px;
+            margin-right: 8px;
+            background: #ddd;
+            border-radius: 2px;
+        }
+        
+        .tab-title {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .tab-actions {
+            margin-left: 8px;
+        }
+        
+        .tab-actions button {
+            padding: 4px 8px;
+            font-size: 11px;
+            margin: 0 2px;
+        }
+        
+        .extension-section {
+            margin-top: 16px;
+            border-top: 1px solid #e0e0e0;
+            padding-top: 12px;
+        }
+        
+        .extension-section h3 {
+            margin: 0 0 8px 0;
+            font-size: 14px;
+            color: #333;
+        }
+        
+        .extension-controls {
+            margin-bottom: 8px;
+        }
+        
+        .extension-list {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        .extension-item {
+            display: flex;
+            align-items: center;
+            padding: 6px 8px;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            margin-bottom: 4px;
+            font-size: 12px;
+            background: white;
+        }
+        
+        .extension-item.high-memory {
+            border-color: #f44336;
+            background: #fff5f5;
+        }
+        
+        .extension-item.medium-memory {
+            border-color: #ff9800;
+            background: #fff8f0;
+        }
+        
+        .extension-item.suggestion {
+            border-color: #2196F3;
+            background: #f0f8ff;
+        }
+        
+        .extension-info {
+            flex: 1;
+        }
+        
+        .extension-name {
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .extension-memory {
+            font-size: 11px;
+            color: #666;
+        }
+        
+        .extension-reason {
+            font-size: 11px;
+            color: #666;
+            margin-top: 2px;
+        }
+        
+        .extension-actions {
+            margin-left: 8px;
+        }
+        
+        .extension-actions button {
+            padding: 3px 6px;
+            font-size: 10px;
+            margin: 0 1px;
+        }
+        
+        .disable-btn {
+            background: #f44336 !important;
+        }
+        
+        .disable-btn:hover {
+            background: #d32f2f !important;
+        }
+        
+        /* Focus Mode Styles */
+        .focus-mode-section {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+        }
+        
+        .focus-status {
+            margin-bottom: 12px;
+        }
+        
+        .focus-indicator {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        
+        .focus-icon {
+            font-size: 18px;
+            margin-right: 8px;
+        }
+        
+        .focus-text {
+            flex: 1;
+            font-weight: bold;
+            font-size: 16px;
+        }
+        
+        .focus-state {
+            font-size: 12px;
+            padding: 2px 8px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.2);
+            font-weight: bold;
+        }
+        
+        .focus-state.active {
+            background: #4CAF50;
+            color: white;
+        }
+        
+        .focus-stats {
+            font-size: 12px;
+            opacity: 0.9;
+        }
+        
+        .stat-item {
+            margin-right: 16px;
+        }
+        
+        .focus-controls {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .focus-toggle {
+            background: rgba(255, 255, 255, 0.2) !important;
+            border: 1px solid rgba(255, 255, 255, 0.3) !important;
+            color: white !important;
+            flex: 1;
+        }
+        
+        .focus-toggle:hover {
+            background: rgba(255, 255, 255, 0.3) !important;
+        }
+        
+        .focus-toggle.active {
+            background: #f44336 !important;
+            border-color: #d32f2f !important;
+        }
+        
+        .focus-toggle.active:hover {
+            background: #d32f2f !important;
+        }
+        
+        .focus-mode-section button.secondary {
+            background: rgba(255, 255, 255, 0.1) !important;
+            border: 1px solid rgba(255, 255, 255, 0.2) !important;
+            color: rgba(255, 255, 255, 0.9) !important;
+        }
+        
+        .focus-mode-section button.secondary:hover {
+            background: rgba(255, 255, 255, 0.2) !important;
+        }
+        
+        /* Extension Recommendations Modal */
+        .recommendations-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        
+        .recommendations-content {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            max-width: 400px;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        
+        .recommendation-item {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            margin-bottom: 8px;
+        }
+        
+        .recommendation-item.installed {
+            background: #f0f8ff;
+            border-color: #2196F3;
+        }
+        
+        .recommendation-info {
+            flex: 1;
+        }
+        
+        .recommendation-name {
+            font-weight: bold;
+            font-size: 14px;
+            margin-bottom: 4px;
+        }
+        
+        .recommendation-desc {
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .recommendation-category {
+            display: inline-block;
+            background: #e3f2fd;
+            color: #1976d2;
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-size: 10px;
+            margin-top: 4px;
+        }
+        
+        .recommendation-actions {
+            margin-left: 12px;
+        }
+        
+        .install-btn {
+            background: #4CAF50 !important;
+            font-size: 11px !important;
+            padding: 6px 12px !important;
+        }
+        
+        .install-btn:hover {
+            background: #45a049 !important;
+        }
+        
+        /* Tags Section Styles */
+        .tags-section {
+            margin-top: 16px;
+            border-top: 1px solid #e0e0e0;
+            padding-top: 12px;
+        }
+        
+        .tags-section h3 {
+            margin: 0 0 8px 0;
+            font-size: 14px;
+            color: #333;
+        }
+        
+        .tag-controls {
+            margin-bottom: 12px;
+        }
+        
+        .tag-filter-controls {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 8px;
+            flex-wrap: wrap;
+        }
+        
+        .filter-btn {
+            background: #f5f5f5 !important;
+            color: #666 !important;
+            border: 1px solid #ddd !important;
+            padding: 4px 8px !important;
+            font-size: 11px !important;
+            margin: 0 !important;
+            border-radius: 12px !important;
+        }
+        
+        .filter-btn.active {
+            background: #2196F3 !important;
+            color: white !important;
+            border-color: #1976D2 !important;
+        }
+        
+        .filter-btn:hover {
+            background: #e0e0e0 !important;
+        }
+        
+        .filter-btn.active:hover {
+            background: #1976D2 !important;
+        }
+
+        /* Simple list style for declutter modal */
+        .declutter-item { padding: 4px 0; border-bottom: 1px solid #eee; }
+        .declutter-item:last-child { border-bottom: none; }
+            background: #1976D2 !important;
+        }
+        
+        .tag-action-controls {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .tags-display {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        .tags-display h4 {
+            margin: 8px 0 4px 0;
+            font-size: 12px;
+            color: #555;
+            font-weight: bold;
+        }
+        
+        .tag-pills {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            margin-bottom: 12px;
+        }
+        
+        .tag-pill {
+            background: #e3f2fd;
+            color: #1976d2;
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-size: 10px;
+            cursor: pointer;
+            border: 1px solid #bbdefb;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        
+        .tag-pill:hover {
+            background: #bbdefb;
+            border-color: #90caf9;
+        }
+        
+        .tag-pill.frequent {
+            background: #e8f5e8;
+            color: #2e7d32;
+            border-color: #c8e6c9;
+        }
+        
+        .tag-pill.frequent:hover {
+            background: #c8e6c9;
+            border-color: #a5d6a7;
+        }
+        
+        .tag-pill.high-priority {
+            background: #ffebee;
+            color: #c62828;
+            border-color: #ffcdd2;
+        }
+        
+        .tag-pill.high-priority:hover {
+            background: #ffcdd2;
+            border-color: #ef9a9a;
+        }
+        
+        .tag-frequency {
+            font-size: 9px;
+            opacity: 0.8;
+        }
+        
+        .tab-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 2px;
+            margin-top: 4px;
+        }
+        
+        .tab-tag {
+            background: #f5f5f5;
+            color: #666;
+            padding: 1px 4px;
+            border-radius: 6px;
+            font-size: 9px;
+            border: 1px solid #e0e0e0;
+        }
+        
+        .group-suggestions {
+            margin-top: 8px;
+        }
+        
+        .group-suggestion {
+            background: #fff3e0;
+            border: 1px solid #ffcc02;
+            border-radius: 4px;
+            padding: 8px;
+            margin-bottom: 4px;
+            font-size: 11px;
+        }
+        
+        .group-suggestion-header {
+            font-weight: bold;
+            color: #e65100;
+            margin-bottom: 2px;
+        }
+        
+        .group-suggestion-reason {
+            color: #bf360c;
+            font-size: 10px;
+            margin-bottom: 4px;
+        }
+        
+        .group-suggestion-actions {
+            display: flex;
+            gap: 4px;
+        }
+        
+        .create-group-btn {
+            background: #ff9800 !important;
+            color: white !important;
+            padding: 2px 6px !important;
+            font-size: 9px !important;
+        }
+        
+        .create-group-btn:hover {
+            background: #f57c00 !important;
+        }
+        
+        .dismiss-suggestion-btn {
+            background: #f5f5f5 !important;
+            color: #666 !important;
+            padding: 2px 6px !important;
+            font-size: 9px !important;
+        }
+        
+        .dismiss-suggestion-btn:hover {
+            background: #e0e0e0 !important;
+        }
+        
+        /* Settings styles */
+        .settings-section {
+            margin-top: 16px;
+            border-top: 1px solid #e0e0e0;
+            padding-top: 12px;
+        }
+        .settings-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 10px;
+        }
+        .setting-item label { font-size: 12px; color: #333; }
+        .setting-item .description { font-size: 11px; color: #777; }
+        .switch { position: relative; display: inline-block; width: 36px; height: 20px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .2s; border-radius: 20px; }
+        .slider:before { position: absolute; content: ""; height: 14px; width: 14px; left: 3px; bottom: 3px; background-color: white; transition: .2s; border-radius: 50%; }
+        input:checked + .slider { background-color: #2196F3; }
+        input:checked + .slider:before { transform: translateX(16px); }
+        
+        /* Enhanced tab item styles for tags */
+        .tab-item.has-tags {
+            border-left: 3px solid #2196F3;
+        }
+        
+        .tab-item.frequent-tag {
+            border-left: 3px solid #4CAF50;
+        }
+        
+        .tab-item.high-priority-tag {
+            border-left: 3px solid #f44336;
+        }
+        
+        /* Restoration controls styles */
+        .restore-controls {
+            display: flex;
+            gap: 4px;
+            align-items: center;
+        }
+        
+        .restoration-status {
+            background: #f8f9fa;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            padding: 8px 12px;
+            margin: 8px 0;
+            font-size: 12px;
+        }
+        
+        .restoration-info {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 6px;
+        }
+        
+        .restoration-mode {
+            font-weight: 500;
+            color: #333;
+        }
+        
+        .restoration-stats {
+            color: #666;
+        }
+        
+        .restoration-memory-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .memory-bar-background {
+            flex: 1;
+            height: 6px;
+            background: #e0e0e0;
+            border-radius: 3px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .memory-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4CAF50, #FFC107, #f44336);
+            border-radius: 3px;
+            transition: width 0.3s;
+        }
+        
+        .memory-threshold-line {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: #2196F3;
+            border-radius: 1px;
+        }
+        
+        .memory-percentage {
+            font-size: 11px;
+            color: #666;
+            min-width: 32px;
+            text-align: right;
+        }
+        
+        /* Tab restoration indicators */
+        .tab-item .restoration-indicator {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #2196F3;
+            display: none;
+        }
+        
+        .tab-item.restoring .restoration-indicator {
+            display: block;
+            animation: pulse 1s infinite;
+        }
+        
+        .tab-item.lite-mode {
+            border-right: 3px solid #FF9800;
+        }
+        
+        .tab-item.lite-mode::after {
+            content: "⚡";
+            position: absolute;
+            top: 2px;
+            right: 6px;
+            font-size: 10px;
+            color: #FF9800;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.2); }
+        }
+    </style>
+<style>
+  /* Popup navigation tabs */
+  .nav-tabs { display: flex; gap: 6px; margin: 0 0 12px 0; }
+  .nav-tabs button { flex: 1; padding: 6px 8px; font-size: 12px; background: #f1f5f9; color: #0f172a; border: 1px solid #e2e8f0; border-radius: 6px; }
+  .nav-tabs button.active { background: #e3f2fd; color: #0d47a1; border-color: #bbdefb; }
+
+  /* Tab search */
+  #tab-search { width: 100%; padding: 6px 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 12px; margin: 8px 0; }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo"></div>
+        <h1>FastBrowse</h1>
+        <div class="header-controls">
+            <button id="toggle-tags" class="icon-btn" title="Toggle Tag Management" style="display: none;">
+                🏷️
+            </button>
+            <button id="open-settings-top" class="icon-btn" title="Open Settings">
+                ⚙️
+            </button>
+        </div>
+    </div>
+
+    <div class="nav-tabs" role="tablist" aria-label="Popup sections">
+        <button id="tab-overview" class="active" aria-selected="true">Overview</button>
+        <button id="tab-tags" aria-selected="false">Tags</button>
+        <button id="tab-settings" aria-selected="false">Settings</button>
+    </div>
+
+    <div id="overview-section">
+    
+    <div class="memory-info">
+        <div class="memory-usage">
+            Memory Usage: <span id="memory-usage">Loading...</span>
+        </div>
+    </div>
+    
+    <div class="focus-mode-section">
+        <div id="focus-mode-status" class="focus-status">
+            <div class="focus-indicator" id="focus-indicator">
+                <span class="focus-icon" id="focus-icon">🎯</span>
+                <span class="focus-text" id="focus-text">Focus Mode</span>
+                <span class="focus-state" id="focus-state">OFF</span>
+            </div>
+            <div class="focus-stats" id="focus-stats" style="display: none;">
+                <span class="stat-item">⏰ <span id="focus-time">0m</span></span>
+                <span class="stat-item">📑 <span id="focus-tabs">0</span> suspended</span>
+            </div>
+        </div>
+        <div class="focus-controls">
+            <button id="toggle-focus-mode" class="focus-toggle">Enable Focus Mode</button>
+            <button id="focus-recommendations" class="secondary" style="display: none;">Recommended Extensions</button>
+        </div>
+    </div>
+    
+    <!-- Context-Aware Status -->
+    <div class="context-aware-section" id="context-aware-section" style="background: #f8f9fa; padding: 12px; border-radius: 6px; margin-bottom: 16px; border-left: 4px solid #9c27b0; display: none;">
+        <div class="context-status">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 16px;">🧠</span>
+                    <span style="font-weight: bold; font-size: 14px; color: #333;">Context-Aware Focus</span>
+                </div>
+                <span id="context-status-badge" class="context-badge" style="padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: bold; background: #9c27b0; color: white;">Personal</span>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 12px; color: #666;">
+                <div>
+                    <strong style="color: #333;">Mode:</strong>
+                    <div id="context-mode" style="color: #9c27b0; font-weight: bold;">Personal</div>
+                </div>
+                <div>
+                    <strong style="color: #333;">Workflow:</strong>
+                    <div id="detected-workflow-popup" style="color: #9c27b0; font-weight: bold;">None</div>
+                </div>
+            </div>
+            
+            <div id="smart-whitelist-info" style="margin-top: 8px; padding: 6px; background: rgba(156, 39, 176, 0.1); border-radius: 4px; font-size: 11px; color: #666; display: none;">
+                <div style="display: flex; align-items: center; gap: 4px;">
+                    <span>✨</span>
+                    <span>Smart whitelist active for <strong id="whitelisted-domains">0</strong> domains</span>
+                </div>
+            </div>
+            
+            <div style="margin-top: 8px; font-size: 10px; color: #999;">
+                Last check: <span id="context-last-check">Never</span>
+            </div>
+        </div>
+    </div>
+    
+    <div class="controls">
+        <button id="suspend-all">Suspend All Tabs</button>
+        <button id="auto-group-tabs-main">Auto-Group Tabs</button>
+        <button id="declutter" class="secondary">Declutter</button>
+        <div class="restore-controls" id="restore-controls">
+            <button id="restore-all" class="secondary">Restore All</button>
+            <button id="restore-all-lite" class="secondary" title="Restore tabs in lite mode to save memory">Restore (Lite)</button>
+            <button id="toggle-restoration-mode" class="icon-btn secondary" title="Toggle restoration mode">
+                <span id="restoration-mode-icon">🧠</span>
+            </button>
+        </div>
+    </div>
+    
+    <!-- Memory-Aware Restoration Status -->
+    <div class="restoration-status" id="restoration-status" style="display: none;">
+        <div class="restoration-info">
+            <span class="restoration-mode">Mode: <span id="current-restoration-mode">Smart</span></span>
+            <span class="restoration-stats">
+                <span id="restoration-progress">0/0</span> restored
+                (<span id="lite-restorations">0</span> lite)
+            </span>
+        </div>
+        <div class="restoration-memory-bar">
+            <div class="memory-bar-background">
+                <div class="memory-bar-fill" id="restoration-memory-fill" style="width: 0%"></div>
+                <div class="memory-threshold-line" id="restoration-threshold-line" style="left: 75%"></div>
+            </div>
+            <span class="memory-percentage" id="restoration-memory-percent">0%</span>
+        </div>
+    </div>
+    
+    <input id="tab-search" type="search" placeholder="Search tabs by title or URL..." aria-label="Search tabs">
+    <div class="tab-list" id="tab-list">
+        <!-- Tab items will be populated here -->
+    </div>
+    
+    </div> <!-- end overview-section -->
+
+    <div class="tags-section" id="tags-section" style="display: none;">
+        <h3>🏷️ Tag Management</h3>
+        <div class="tag-controls">
+            <div class="tag-filter-controls">
+                <button id="show-all-tabs" class="filter-btn active">All</button>
+                <button id="show-frequent-tags" class="filter-btn">Frequent</button>
+                <button id="show-active-tags" class="filter-btn">Active</button>
+                <select id="tag-filter-select" style="display: none;">
+                    <option value="">Filter by tag...</option>
+                </select>
+            </div>
+            <div class="tag-action-controls">
+                <button id="auto-group-tabs" class="secondary">Auto-Group</button>
+                <button id="open-settings" class="secondary">Settings ⚙️</button>
+                <button id="close-tags" class="secondary">Close</button>
+            </div>
+        </div>
+        <div class="tags-display" id="tags-display" style="display: block;">
+            <div class="frequent-tags">
+                <h4>Frequent Tags</h4>
+                <div class="tag-pills" id="frequent-tag-pills"></div>
+            </div>
+            <div class="active-tags">
+                <h4>Active Tags</h4>
+                <div class="tag-pills" id="active-tag-pills"></div>
+            </div>
+            <div class="group-suggestions">
+                <h4>Group Suggestions</h4>
+                <div id="group-suggestions"></div>
+            </div>
+            <div class="relationships">
+                <h4>Tab Relationships</h4>
+                <div style="margin-bottom:6px;">
+                    <button id="refresh-relationships" class="secondary" style="padding:4px 8px;">Refresh</button>
+                </div>
+                <div id="relationship-groups"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Declutter Modal -->
+    <div class="recommendations-modal" id="declutter-modal" style="display:none;">
+        <div class="recommendations-content" style="max-width: 420px;">
+            <h3 style="margin-top:0;">Declutter Preview</h3>
+            <div id="declutter-summary" style="font-size:13px; color:#333; margin-bottom:8px;"></div>
+            <div>
+                <details style="margin-bottom:8px;">
+                    <summary>Duplicate Tabs</summary>
+                    <div id="declutter-duplicates" style="max-height:160px; overflow:auto; font-size:12px; color:#555;"></div>
+                </details>
+                <details>
+                    <summary>Stale Tabs</summary>
+                    <div id="declutter-stale" style="max-height:160px; overflow:auto; font-size:12px; color:#555;"></div>
+                </details>
+            </div>
+            <div style="margin-top:12px; display:flex; gap:8px;">
+                <button id="declutter-execute">Declutter Now</button>
+                <button id="declutter-cancel" class="secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Panel -->
+    <div class="settings-section" id="settings-section" style="display: none;">
+        <h3>Settings</h3>
+        <div class="settings-grid">
+            <div class="setting-item">
+                <label>Auto-suspend inactive tabs</label>
+                <label class="switch">
+                    <input type="checkbox" id="set-auto-suspend">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            <div class="setting-item">
+                <label>Suspend after (minutes)</label>
+                <div class="range-container">
+                    <input type="range" id="set-suspend-delay" min="5" max="120" value="30">
+                    <span class="range-value" id="set-suspend-delay-value">30</span>
+                </div>
+            </div>
+            <div class="setting-item">
+                <label>Smart memory alerts</label>
+                <label class="switch">
+                    <input type="checkbox" id="set-memory-smart-mode">
+                    <span class="slider"></span>
+                </label>
+                <div class="description">Alert only when Chrome is likely responsible</div>
+            </div>
+            <div class="setting-item">
+                <label>Memory threshold (%)</label>
+                <div class="range-container">
+                    <input type="range" id="set-memory-limit" min="60" max="95" value="80">
+                    <span class="range-value" id="set-memory-limit-value">80</span>
+                </div>
+            </div>
+            <div class="setting-item">
+                <label>Enable tags system</label>
+                <label class="switch">
+                    <input type="checkbox" id="set-tags-enabled">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            <div class="setting-item">
+                <label>Smart mute background audio</label>
+                <label class="switch">
+                    <input type="checkbox" id="set-smart-mute">
+                    <span class="slider"></span>
+                </label>
+                <div class="description">Mutes non-active tabs except meetings/music domains</div>
+            </div>
+            <div class="setting-item">
+                <label>Smart Memory Forecasting</label>
+                <label class="switch">
+                    <input type="checkbox" id="set-forecasting-enabled">
+                    <span class="slider"></span>
+                </label>
+                <div class="description">Predict spikes and pre-emptively suspend to avoid hits</div>
+            </div>
+            <div class="setting-item">
+                <label>Forecast horizon (minutes)</label>
+                <div class="range-container">
+                    <input type="range" id="set-forecast-horizon" min="1" max="10" value="3">
+                    <span class="range-value" id="set-forecast-horizon-value">3</span>
+                </div>
+            </div>
+            <div class="setting-item">
+                <label>Tab relationships (auto-map)</label>
+                <label class="switch">
+                    <input type="checkbox" id="set-relationships-enabled">
+                    <span class="slider"></span>
+                </label>
+                <div class="description">Map link-opened chains to keep research context</div>
+            </div>
+            <div class="setting-item">
+                <label>Relationship decay (minutes)</label>
+                <div class="range-container">
+                    <input type="range" id="set-relationship-decay" min="10" max="240" value="60">
+                    <span class="range-value" id="set-relationship-decay-value">60</span>
+                </div>
+            </div>
+            <div class="setting-item">
+                <label>Declutter stale threshold (minutes)</label>
+                <div class="range-container">
+                    <input type="range" id="set-declutter-stale" min="30" max="360" value="120">
+                    <span class="range-value" id="set-declutter-stale-value">120</span>
+                </div>
+            </div>
+            <div class="setting-item">
+                <label>Declutter domain whitelist (comma separated)</label>
+                <input type="text" id="set-declutter-whitelist" placeholder="e.g., example.com, mysite.org" style="width:100%; padding:6px; border:1px solid #ddd; border-radius:4px;" />
+                <div class="description">Tabs from these domains won’t be closed/suspended by Declutter</div>
+            </div>
+            <div class="setting-item">
+                <label>Focus Mode music</label>
+                <div style="display:flex; gap:8px; align-items:center;">
+                    <select id="set-focus-music">
+                        <!-- Options populated dynamically -->
+                    </select>
+                    <button id="preview-focus-music" class="secondary" style="padding:4px 8px;">Preview</button>
+                </div>
+                <div class="description">Select ambient music to accompany Focus Mode</div>
+            </div>
+            
+            <!-- Context-Aware Settings -->
+            <div class="setting-item" style="border-top: 1px solid #e0e0e0; padding-top: 12px; margin-top: 12px;">
+                <label style="font-weight: bold; color: #9c27b0;">🧠 Context-Aware Focus</label>
+                <label class="switch">
+                    <input type="checkbox" id="set-context-aware-enabled">
+                    <span class="slider"></span>
+                </label>
+                <div class="description">Enable smart focus rules based on work hours and workflows</div>
+            </div>
+            
+            <div class="setting-item">
+                <label>Work hours detection</label>
+                <label class="switch">
+                    <input type="checkbox" id="set-work-hours-enabled">
+                    <span class="slider"></span>
+                </label>
+                <div class="description">Different focus rules during work vs personal time</div>
+            </div>
+            
+            <div class="setting-item">
+                <label>Work mode intensity</label>
+                <select id="set-work-mode-intensity" style="padding: 6px; border: 1px solid #ddd; border-radius: 4px; width: 100%;">
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                </select>
+                <div class="description">How aggressively to remove distractions during work</div>
+            </div>
+            
+            <div class="setting-item">
+                <label>Workflow detection</label>
+                <label class="switch">
+                    <input type="checkbox" id="set-workflow-detection-enabled">
+                    <span class="slider"></span>
+                </label>
+                <div class="description">Auto-detect coding, writing, research workflows</div>
+            </div>
+            
+            <div class="setting-item">
+                <label>Smart whitelisting</label>
+                <label class="switch">
+                    <input type="checkbox" id="set-smart-whitelist-enabled">
+                    <span class="slider"></span>
+                </label>
+                <div class="description">Temporarily disable distractions for important workflows</div>
+            </div>
+        </div>
+        <div style="margin-top: 12px; display: flex; gap: 8px;">
+            <button id="save-settings">Save</button>
+            <button id="open-full-options" class="secondary">Full Options</button>
+            <button id="close-settings" class="secondary">Close</button>
+        </div>
+    </div>
+
+    <div class="extension-section">
+        <h3>Extension Memory Analysis</h3>
+        <div class="extension-controls">
+            <button id="analyze-extensions" class="secondary">Analyze Extensions</button>
+            <button id="toggle-extensions" class="secondary">Show/Hide</button>
+        </div>
+        <div class="extension-list" id="extension-list" style="display: none;">
+            <!-- Extension items will be populated here -->
+        </div>
+    </div>
+    
+    <div id="toast-container" class="toast-container"></div>
+    
+    <script src="popup.js"></script>
+</body>
+</html>
