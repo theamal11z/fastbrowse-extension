@@ -1,6 +1,16 @@
 // FastBrowse Speed Metrics Collector
 // Collects Navigation/Paint/LCP/Resource timings and reports to background
 
+// Cross-browser shim: map chrome.* to browser.* in Firefox so async/await works
+(function(){
+  try {
+    const isFirefox = typeof browser !== 'undefined' && browser && typeof browser.runtime !== 'undefined';
+    if (isFirefox) {
+      globalThis.chrome = browser;
+    }
+  } catch (_) {}
+})();
+
 (function() {
   function getNavTimings() {
     try {

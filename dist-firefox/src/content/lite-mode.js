@@ -297,13 +297,12 @@ class LiteModeManager {
         `;
         
         const icon = type === 'video' ? '🎥' : type === 'social-embed' ? '📱' : '🖼️';
-        placeholder.innerHTML = `
-            <div style="text-align: center;">
-                <div style="font-size: 24px; margin-bottom: 8px;">${icon}</div>
-                <div style="font-size: 14px; font-weight: 500;">Content blocked for memory optimization</div>
-                <div style="font-size: 12px; color: #999; margin-top: 4px;">Click to load</div>
-            </div>
-        `;
+        const wrap = document.createElement('div');
+        wrap.style.textAlign = 'center';
+        const iconDiv = document.createElement('div'); iconDiv.style.fontSize = '24px'; iconDiv.style.marginBottom = '8px'; iconDiv.textContent = icon; wrap.appendChild(iconDiv);
+        const titleDiv = document.createElement('div'); titleDiv.style.fontSize = '14px'; titleDiv.style.fontWeight = '500'; titleDiv.textContent = 'Content blocked for memory optimization'; wrap.appendChild(titleDiv);
+        const hintDiv = document.createElement('div'); hintDiv.style.fontSize = '12px'; hintDiv.style.color = '#999'; hintDiv.style.marginTop = '4px'; hintDiv.textContent = 'Click to load'; wrap.appendChild(hintDiv);
+        placeholder.appendChild(wrap);
         
         // Handle click to restore element
         placeholder.addEventListener('click', () => {

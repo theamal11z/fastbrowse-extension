@@ -1,6 +1,16 @@
 // FastBrowse State Snapshot Content Script
 // Captures minimal tab state (scroll position and form fields) and restores it on demand
 
+// Cross-browser shim: map chrome.* to browser.* in Firefox so async/await works
+(function(){
+  try {
+    const isFirefox = typeof browser !== 'undefined' && browser && typeof browser.runtime !== 'undefined';
+    if (isFirefox) {
+      globalThis.chrome = browser;
+    }
+  } catch (_) {}
+})();
+
 (() => {
   function buildSelector(el) {
     try {

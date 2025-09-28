@@ -1,6 +1,16 @@
 // FastBrowse Options Script
 // Handles settings management and UI interactions
 
+// Cross-browser shim: map chrome.* to browser.* in Firefox so async/await works
+(function(){
+  try {
+    const isFirefox = typeof browser !== 'undefined' && browser && typeof browser.runtime !== 'undefined';
+    if (isFirefox) {
+      globalThis.chrome = browser;
+    }
+  } catch (_) {}
+})();
+
 class OptionsManager {
     constructor() {
         this.elements = {
@@ -1068,7 +1078,7 @@ class OptionsManager {
     renderSpeedList(items) {
         const root = this.elements.speedList;
         if (!root) return;
-        root.innerHTML = '';
+        while (root.firstChild) root.removeChild(root.firstChild);
         if (!items || items.length === 0) {
             const empty = document.createElement('div');
             empty.textContent = 'No data yet. Browse some pages and come back.';
@@ -1094,7 +1104,14 @@ class OptionsManager {
             left.textContent = `${new URL(item.url).hostname} — ${new Date(item.ts).toLocaleTimeString()}`;
             const right = document.createElement('div');
             right.style.fontSize = '13px';
-            right.innerHTML = `<strong>Score:</strong> <span style="color:${item.score>=80?'#4caf50':item.score>=60?'#ff9800':'#f44336'}">${item.score}</span>`;
+            const strong = document.createElement('strong');
+            strong.textContent = 'Score:';
+            const span = document.createElement('span');
+            span.style.color = (item.score>=80?'#4caf50':item.score>=60?'#ff9800':'#f44336');
+            span.style.marginLeft = '4px';
+            span.textContent = String(item.score);
+            right.appendChild(strong);
+            right.appendChild(span);
             header.appendChild(left); header.appendChild(right);
             wrap.appendChild(header);
 
@@ -1105,12 +1122,16 @@ class OptionsManager {
             grid.style.gridTemplateColumns = 'repeat(4, 1fr)';
             grid.style.gap = '6px';
             grid.style.marginTop = '8px';
-            grid.innerHTML = `
-                <div><strong>FCP</strong><div>${Math.round(p.firstContentfulPaint||0)} ms</div></div>
-                <div><strong>LCP</strong><div>${Math.round(item.lcp||0)} ms</div></div>
-                <div><strong>DCL</strong><div>${Math.round(t.domContentLoadedEventEnd||0)} ms</div></div>
-                <div><strong>Load</strong><div>${Math.round(t.loadEventEnd||0)} ms</div></div>
-            `;
+            const mkCell = (label, value) => {
+                const c = document.createElement('div');
+                const s = document.createElement('strong'); s.textContent = label; c.appendChild(s);
+                const v = document.createElement('div'); v.textContent = `${Math.round(value||0)} ms`; c.appendChild(v);
+                return c;
+            };
+            grid.appendChild(mkCell('FCP', p.firstContentfulPaint));
+            grid.appendChild(mkCell('LCP', item.lcp));
+            grid.appendChild(mkCell('DCL', t.domContentLoadedEventEnd));
+            grid.appendChild(mkCell('Load', t.loadEventEnd));
             wrap.appendChild(grid);
 
             // Bottleneck summary
@@ -1123,7 +1144,10 @@ class OptionsManager {
                 if (typeof item.bottlenecks.slowCount === 'number') parts.push(`${item.bottlenecks.slowCount} slow 3rd‑party script(s)`);
                 if (typeof item.bottlenecks.cpuLongTaskTotalMs === 'number') parts.push(`Long tasks ${item.bottlenecks.cpuLongTaskTotalMs}ms`);
                 if (parts.length > 0) {
-                    bot.innerHTML = `<strong>Bottlenecks:</strong> ${parts.join(', ')}`;
+                    const strong2 = document.createElement('strong');
+                    strong2.textContent = 'Bottlenecks:';
+                    bot.appendChild(strong2);
+                    bot.appendChild(document.createTextNode(' ' + parts.join(', ')));
                     wrap.appendChild(bot);
                 }
             }
@@ -1377,7 +1401,7 @@ class OptionsManager {
     buildSectionNav() {
         if (!this.elements.settingsNav || !this.elements.settingsContent) return;
         const nav = this.elements.settingsNav;
-        nav.innerHTML = '';
+        while (nav.firstChild) nav.removeChild(nav.firstChild);
 
         const sections = Array.from(document.querySelectorAll('#settings-content .section'));
         const links = [];
@@ -1496,29 +1520,44 @@ document.addEventListener('DOMContentLoaded', () => {
     // Add keyboard shortcuts info
     const infoSection = document.createElement('div');
     infoSection.className = 'section';
-    infoSection.innerHTML = `
-        <h2>Tips & Information</h2>
-        <p><strong>How it works:</strong> FastBrowse uses Chrome's native tab discarding feature to suspend inactive tabs, freeing up memory while preserving your browsing session.</p>
-        <p><strong>Protected tabs:</strong> Pinned tabs, tabs playing audio, and system pages are automatically protected from suspension.</p>
-        <p><strong>Memory monitoring:</strong> The extension continuously monitors system memory usage and can automatically suspend tabs when usage gets too high.</p>
-        <p><strong>Performance:</strong> This extension is designed to use minimal resources itself - the background script only activates when needed.</p>
-        
-        <h3>Best Practices</h3>
-        <ul>
-            <li>Start with a 30-minute suspension delay and adjust based on your browsing habits</li>
-            <li>Enable memory threshold monitoring if you frequently run low on RAM</li>
-            <li>Pin important tabs that you want to keep active</li>
-            <li>Use the popup to manually suspend tabs when needed</li>
-        </ul>
-        
-        <h3>Keyboard Shortcuts</h3>
-        <p>You can set up keyboard shortcuts for FastBrowse in Chrome's extension settings:</p>
-        <ol>
-            <li>Go to <code>chrome://extensions/shortcuts</code></li>
-            <li>Find "FastBrowse" in the list</li>
-            <li>Set shortcuts for "Suspend all tabs" and "Open popup"</li>
-        </ol>
-    `;
-    
+
+    const h2 = document.createElement('h2'); h2.textContent = 'Tips & Information'; infoSection.appendChild(h2);
+
+    const p1 = document.createElement('p');
+    const s1 = document.createElement('strong'); s1.textContent = 'How it works:'; p1.appendChild(s1);
+    p1.appendChild(document.createTextNode(" FastBrowse uses Chrome's native tab discarding feature to suspend inactive tabs, freeing up memory while preserving your browsing session."));
+    infoSection.appendChild(p1);
+
+    const p2 = document.createElement('p');
+    const s2 = document.createElement('strong'); s2.textContent = 'Protected tabs:'; p2.appendChild(s2);
+    p2.appendChild(document.createTextNode(' Pinned tabs, tabs playing audio, and system pages are automatically protected from suspension.'));
+    infoSection.appendChild(p2);
+
+    const p3 = document.createElement('p');
+    const s3 = document.createElement('strong'); s3.textContent = 'Memory monitoring:'; p3.appendChild(s3);
+    p3.appendChild(document.createTextNode(' The extension continuously monitors system memory usage and can automatically suspend tabs when usage gets too high.'));
+    infoSection.appendChild(p3);
+
+    const p4 = document.createElement('p');
+    const s4 = document.createElement('strong'); s4.textContent = 'Performance:'; p4.appendChild(s4);
+    p4.appendChild(document.createTextNode(' This extension is designed to use minimal resources itself - the background script only activates when needed.'));
+    infoSection.appendChild(p4);
+
+    const h3a = document.createElement('h3'); h3a.textContent = 'Best Practices'; infoSection.appendChild(h3a);
+    const ul = document.createElement('ul');
+    ['Start with a 30-minute suspension delay and adjust based on your browsing habits',
+     'Enable memory threshold monitoring if you frequently run low on RAM',
+     'Pin important tabs that you want to keep active',
+     'Use the popup to manually suspend tabs when needed']
+     .forEach(txt => { const li = document.createElement('li'); li.textContent = txt; ul.appendChild(li); });
+    infoSection.appendChild(ul);
+
+    const h3b = document.createElement('h3'); h3b.textContent = 'Keyboard Shortcuts'; infoSection.appendChild(h3b);
+    const p5 = document.createElement('p'); p5.textContent = 'You can set up keyboard shortcuts for FastBrowse in Chrome\'s extension settings:'; infoSection.appendChild(p5);
+    const ol = document.createElement('ol');
+    ['Go to chrome://extensions/shortcuts','Find "FastBrowse" in the list','Set shortcuts for "Suspend all tabs" and "Open popup"']
+      .forEach(txt => { const li = document.createElement('li'); li.textContent = txt; ol.appendChild(li); });
+    infoSection.appendChild(ol);
+
     document.body.appendChild(infoSection);
 });

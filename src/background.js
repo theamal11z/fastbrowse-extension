@@ -1,6 +1,28 @@
 // FastBrowse Background Service Worker
 // Handles tab discarding and memory optimization
 
+// Cross-browser shim: map chrome.* to browser.* in Firefox so async/await works
+(function(){
+  try {
+    const isFirefox = typeof browser !== 'undefined' && browser && typeof browser.runtime !== 'undefined';
+    if (isFirefox) {
+      // Use Promise-based browser APIs via the chrome namespace used by this codebase
+      globalThis.chrome = browser;
+      // Provide a fallback for MV2 where chrome.scripting is unavailable
+      if (!globalThis.chrome.scripting) globalThis.chrome.scripting = {};
+      if (typeof globalThis.chrome.scripting.executeScript !== 'function') {
+        globalThis.chrome.scripting.executeScript = async ({ target, files }) => {
+          if (!target || typeof target.tabId !== 'number') throw new Error('Missing target.tabId');
+          for (const file of (files || [])) {
+            await globalThis.chrome.tabs.executeScript(target.tabId, { file });
+          }
+          return [];
+        };
+      }
+    }
+  } catch (_) {}
+})();
+
 class FastBrowse {
     constructor() {
 this.settings = {
@@ -265,6 +287,15 @@ this.settings = {
     async init() {
         // Load settings from storage
         await this.loadSettings();
+        
+        // Firefox: if management API is unavailable, disable extension monitoring features to avoid errors
+        try {
+            if (!chrome.management || typeof chrome.management.getAll !== 'function') {
+                this.settings.extensionMonitoring = false;
+                this.settings.extensionSuggestions = false;
+                try { await chrome.storage.sync.set({ extensionMonitoring: false, extensionSuggestions: false }); } catch (_) {}
+            }
+        } catch (_) {}
         // Load learned leak domains
         try {
             const stored = await chrome.storage.local.get(['fastbrowse_leak_domains']);

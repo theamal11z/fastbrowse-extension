@@ -2,6 +2,16 @@
 // - Hardware Acceleration Tuner (placeholder hooks)
 // - WebGL Performance Profiles: tweak WebGL context attributes safely
 
+// Cross-browser shim: map chrome.* to browser.* in Firefox so async/await works
+(function(){
+  try {
+    const isFirefox = typeof browser !== 'undefined' && browser && typeof browser.runtime !== 'undefined';
+    if (isFirefox) {
+      globalThis.chrome = browser;
+    }
+  } catch (_) {}
+})();
+
 (function () {
   const cfg = {
     gpuMode: 'auto',

@@ -11,6 +11,11 @@
   } catch (_) {}
 })();
 
+function clearElement(el) {
+  if (!el) return;
+  while (el.firstChild) el.removeChild(el.firstChild);
+}
+
 class PopupManager {
     constructor() {
         this.memoryUsageElement = document.getElementById('memory-usage');
@@ -391,7 +396,11 @@ class PopupManager {
     
     updateTagFilterOptions() {
         // Update the tag filter select options
-        this.tagFilterSelect.innerHTML = '<option value="">Filter by tag...</option>';
+        clearElement(this.tagFilterSelect);
+        const first = document.createElement('option');
+        first.value = '';
+        first.textContent = 'Filter by tag...';
+        this.tagFilterSelect.appendChild(first);
         
         this.allTags.forEach(tag => {
             const option = document.createElement('option');
@@ -422,8 +431,8 @@ class PopupManager {
             });
         }
         
-        // Clear existing list
-        this.tabListElement.innerHTML = '';
+        // Clear existing list safely
+        clearElement(this.tabListElement);
         
         // Sort tabs: active first, then by window, then by index
         filteredTabs.sort((a, b) => {
@@ -586,7 +595,7 @@ class PopupManager {
     }
     
     renderTagPills(tags, container, type) {
-        container.innerHTML = '';
+        clearElement(container);
         
         if (tags.length === 0) {
             const noTags = document.createElement('div');
@@ -660,7 +669,7 @@ class PopupManager {
     }
     
     renderGroupSuggestions(suggestions) {
-        this.groupSuggestionsElement.innerHTML = '';
+        clearElement(this.groupSuggestionsElement);
         
         if (suggestions.length === 0) {
             const noSuggestions = document.createElement('div');
@@ -975,7 +984,7 @@ class PopupManager {
             }
         } catch (_) {}
         if (!this.setFocusMusic) return;
-        this.setFocusMusic.innerHTML = '';
+        clearElement(this.setFocusMusic);
         const add = (value, label) => {
             const opt = document.createElement('option');
             opt.value = value;
@@ -1080,14 +1089,14 @@ class PopupManager {
             if (!resp.success) throw new Error(resp.error || 'Preview failed');
             const { counts, duplicates, stale } = resp.data;
             this.declutterSummary.textContent = `${counts.duplicates} duplicate tabs, ${counts.stale} stale tabs found`;
-            this.declutterDuplicates.innerHTML = '';
+            clearElement(this.declutterDuplicates);
             duplicates.slice(0, 50).forEach(item => {
                 const div = document.createElement('div');
                 div.className = 'declutter-item';
                 div.textContent = `${item.title || 'Untitled'} — ${item.url}`;
                 this.declutterDuplicates.appendChild(div);
             });
-            this.declutterStale.innerHTML = '';
+            clearElement(this.declutterStale);
             stale.slice(0, 50).forEach(item => {
                 const div = document.createElement('div');
                 div.className = 'declutter-item';
@@ -1212,15 +1221,19 @@ class PopupManager {
             this.renderRelationships(resp.data || []);
         } catch (e) {
             console.error('Failed to load relationships:', e);
-            if (this.relationshipGroupsElement) this.relationshipGroupsElement.innerHTML = '<div style="color:#999; font-size:11px;">No relationships found</div>';
+            if (this.relationshipGroupsElement) { const msg = document.createElement('div'); msg.style.color = '#999'; msg.style.fontSize = '11px'; msg.textContent = 'No relationships found'; clearElement(this.relationshipGroupsElement); this.relationshipGroupsElement.appendChild(msg);}
         }
     }
 
     renderRelationships(groups) {
         if (!this.relationshipGroupsElement) return;
-        this.relationshipGroupsElement.innerHTML = '';
+        clearElement(this.relationshipGroupsElement);
         if (!groups || groups.length === 0) {
-            this.relationshipGroupsElement.innerHTML = '<div style="color:#999; font-size:11px;">No relationships found</div>';
+            const msg = document.createElement('div');
+            msg.style.color = '#999';
+            msg.style.fontSize = '11px';
+            msg.textContent = 'No relationships found';
+            this.relationshipGroupsElement.appendChild(msg);
             return;
         }
         groups.slice(0, 5).forEach((group, idx) => {
