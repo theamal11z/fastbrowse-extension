@@ -1526,6 +1526,19 @@ document.addEventListener('DOMContentLoaded', () => {
     lbl.appendChild(cb); lbl.appendChild(document.createTextNode(' Prefer Electrolysis-aware suspension'));
     toggleRow.appendChild(lbl); ffSection.appendChild(toggleRow);
 
+    const toggles = document.createElement('div');
+    toggles.style.display='grid'; toggles.style.gridTemplateColumns='repeat(auto-fit,minmax(260px,1fr))'; toggles.style.gap='8px'; toggles.style.marginTop='6px';
+    const makeToggle = (id, label, settingKey) => {
+        const w = document.createElement('label'); const cb = document.createElement('input'); cb.type='checkbox'; cb.id=id; w.appendChild(cb); w.appendChild(document.createTextNode(' '+label));
+        chrome.runtime.sendMessage({ action:'getSettings' }, (r)=>{ try { if (r && r.success && r.data && Object.prototype.hasOwnProperty.call(r.data, settingKey)) cb.checked = !!r.data[settingKey]; } catch(_){} });
+        cb.addEventListener('change', ()=>{ const patch={}; patch[settingKey]=cb.checked; try { chrome.runtime.sendMessage({ action:'updateSettings', settings: patch }, ()=>{}); } catch(_){} });
+        return w;
+    };
+    toggles.appendChild(makeToggle('toggle-pocket-suggest','Suggest Pocket before suspend','pocketSuggestBeforeSuspend'));
+    toggles.appendChild(makeToggle('toggle-pocket-archive','Treat Pocket‑saved as archivable','pocketTreatSavedAsArchivable'));
+    toggles.appendChild(makeToggle('toggle-sync-aware','Protect recently synced tabs','syncAwareSuspend'));
+    ffSection.appendChild(toggles);
+
     const actions = document.createElement('div'); actions.style.display='flex'; actions.style.gap='8px'; actions.style.marginTop='8px';
     const btnZombie = document.createElement('button'); btnZombie.textContent = 'Check Zombie Tabs'; actions.appendChild(btnZombie);
     const btnCache = document.createElement('button'); btnCache.textContent = 'Clear HTTP Cache'; actions.appendChild(btnCache);

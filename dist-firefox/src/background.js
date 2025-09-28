@@ -177,7 +177,13 @@ this.settings = {
             // Firefox-centric settings
             firefoxOptimizations: true,
             ffPreferAltSuspend: true, // In Firefox, prefer navigation-based suspension for better e10s behavior
-            ffZombieCheckAggressive: false
+            ffZombieCheckAggressive: false,
+            // Pocket & Sync
+            pocketSuggestBeforeSuspend: true,
+            pocketTreatSavedAsArchivable: true,
+            pocketSuggestCooldownMinutes: 120,
+            syncAwareSuspend: true,
+            recentlySyncedGraceMinutes: 60
         };
         
         this.suspendedTabs = new Map();
@@ -227,6 +233,11 @@ this.settings = {
         
         // Memory-aware restoration state
         this.restorationQueue = [];
+
+        // Pocket & Sync markers
+        this.pocketSaved = new Set(); // normalized URLs
+        this.recentlySynced = new Map(); // tabId -> ts
+        this.lastPocketSuggest = new Map(); // domain -> ts
         this.activeRestorations = new Set();
         this.restorationStats = {
             totalRestored: 0,
@@ -343,6 +354,11 @@ this.settings = {
         try {
             const result = await chrome.storage.sync.get(this.settings);
             this.settings = { ...this.settings, ...result };
+            try {
+                const saved = await chrome.storage.local.get(['fastbrowse_pocket_saved_urls']);
+                const arr = saved.fastbrowse_pocket_saved_urls || [];
+                if (Array.isArray(arr)) arr.forEach(u => this.pocketSaved.add(u));
+            } catch (_) {}
         } catch (error) {
             console.error('Failed to load settings:', error);
         }
@@ -633,6 +649,9 @@ this.settings = {
                 return;
             }
             
+            // Suggest Pocket before suspend (once per domain per cooldown)
+            try { await this.maybeSuggestPocket(tab); } catch (_) {}
+
             const timer = setTimeout(() => {
                 this.suspendTab(tabId);
             }, delayMs);
@@ -1230,6 +1249,9 @@ this.restorationStats.memoryOptimized++;
             return true;
         }
         
+        // Treat recently synced tabs as protected for a grace period
+        try { if (this.isRecentlySynced(tab)) return true; } catch (_) {}
+        
         // Don't suspend active tabs
         if (tab.active) {
             return true;
@@ -1564,6 +1586,9 @@ this.restorationStats.memoryOptimized++;
                 return (a.lastAccessed || 0) - (b.lastAccessed || 0);
             });
 
+            // Prefer suspending Pocket-saved tabs first if archivable
+            const pocketFirst = (t) => this.isPocketSavedUrl(t.url) && this.settings.pocketTreatSavedAsArchivable ? -1 : 0;
+            prioritized.sort((a,b)=> pocketFirst(a)-pocketFirst(b) || ( (a.lastAccessed||0)-(b.lastAccessed||0) ));
             prioritized
                 .slice(0, 5)
                 .forEach(tab => this.suspendTab(tab.id));
@@ -1631,6 +1656,53 @@ this.restorationStats.memoryOptimized++;
         }
     }
     
+    // Pocket & Sync helpers
+    normalizeUrlForPocket(urlStr) {
+        try { const u = new URL(urlStr); u.hash=''; return u.toString(); } catch (_) { return urlStr || ''; }
+    }
+    isPocketSavedUrl(urlStr) {
+        if (!urlStr) return false; const n = this.normalizeUrlForPocket(urlStr); return this.pocketSaved.has(n);
+    }
+    async markPocketSaved(urlStr) {
+        const n = this.normalizeUrlForPocket(urlStr);
+        if (!n) return false;
+        this.pocketSaved.add(n);
+        try { await chrome.storage.local.set({ fastbrowse_pocket_saved_urls: Array.from(this.pocketSaved) }); } catch(_){}
+        return true;
+    }
+    async maybeSuggestPocket(tab) {
+        try {
+            if (!this.settings.pocketSuggestBeforeSuspend) return;
+            if (!tab || !tab.url || tab.discarded || tab.pinned) return;
+            if (this.isPocketSavedUrl(tab.url)) return;
+            const host = new URL(tab.url).hostname.replace('www.','');
+            const cdMin = Math.max(1, this.settings.pocketSuggestCooldownMinutes || 120);
+            const last = this.lastPocketSuggest.get(host) || 0;
+            if (Date.now() - last < cdMin*60*1000) return;
+            this.lastPocketSuggest.set(host, Date.now());
+            const title = (tab.title||'Save to Pocket');
+            const saveUrl = `https://getpocket.com/save?url=${encodeURIComponent(tab.url)}&title=${encodeURIComponent(title)}`;
+            this.showNotification('Save this tab to Pocket before suspending?', {
+                buttons: [{ title: 'Save to Pocket' }, { title: 'Dismiss' }],
+                requireInteraction: true
+            });
+            // When user clicks notification button, we handle globally in onButtonClicked if we store context; simplify: open immediately on suggestion (less interactive)
+        } catch (_) {}
+    }
+
+    markRecentlySynced(tabId) {
+        try { this.recentlySynced.set(tabId, Date.now()); } catch (_) {}
+    }
+    isRecentlySynced(tab) {
+        try {
+            if (!this.settings.syncAwareSuspend) return false;
+            const ts = this.recentlySynced.get(tab.id);
+            if (!ts) return false;
+            const mins = this.settings.recentlySyncedGraceMinutes || 60;
+            return (Date.now() - ts) < mins * 60 * 1000;
+        } catch (_) { return false; }
+    }
+
     // Firefox integration helpers
     async initFirefoxIntegration() {
         try {
@@ -4296,6 +4368,16 @@ this.restorationStats.memoryOptimized++;
                 contexts: ['page', 'action']
             });
             
+            // Pocket & Sync quick actions (Firefox only)
+            try {
+                const isFirefox = typeof browser !== 'undefined' && browser;
+                if (isFirefox) {
+                    chrome.contextMenus.create({ id: 'fastbrowse-tools', title: '🧰 FastBrowse Tools', contexts: ['page','action'] });
+                    chrome.contextMenus.create({ id: 'save-to-pocket', parentId: 'fastbrowse-tools', title: 'Save to Pocket', contexts: ['page','action'] });
+                    chrome.contextMenus.create({ id: 'mark-recently-synced', parentId: 'fastbrowse-tools', title: 'Mark as Recently Synced', contexts: ['page','action'] });
+                }
+            } catch (_) {}
+
             // Add recent tags as submenu items
             this.updateContextMenuTags();
             
@@ -4585,6 +4667,20 @@ this.restorationStats.memoryOptimized++;
                     break;
                     
                 default:
+                    if (info.menuItemId === 'save-to-pocket') {
+                        try {
+                            const title = (tab && tab.title) || 'Saved via FastBrowse';
+                            const saveUrl = `https://getpocket.com/save?url=${encodeURIComponent(tab.url||'')}&title=${encodeURIComponent(title)}`;
+                            await chrome.tabs.create({ url: saveUrl, index: (tab ? tab.index+1 : undefined), windowId: (tab ? tab.windowId : undefined) });
+                            await this.markPocketSaved(tab.url||'');
+                            this.showNotification('Opened Pocket save. Tab will be treated as archivable.');
+                        } catch (e) { this.showNotification('Failed to open Pocket'); }
+                        break;
+                    }
+                    if (info.menuItemId === 'mark-recently-synced') {
+                        try { this.markRecentlySynced(tab.id); this.showNotification('Marked as recently synced'); } catch (_) {}
+                        break;
+                    }
                     // Check if it's an assign-tag action
                     if (info.menuItemId.startsWith('assign-tag-')) {
                         const tagIndex = parseInt(info.menuItemId.replace('assign-tag-', ''));
