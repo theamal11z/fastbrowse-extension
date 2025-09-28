@@ -84,11 +84,98 @@
             margin-top: 5px;
         }
     </style>
+<style>
+  /* Layout enhancements */
+  .settings-layout {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      gap: 20px;
+  }
+  #settings-nav {
+      position: sticky;
+      top: 20px;
+      align-self: start;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      padding: 12px;
+      background: #fafafa;
+  }
+  #settings-nav a {
+      display: block;
+      padding: 8px 10px;
+      margin: 2px 0;
+      border-radius: 6px;
+      color: #333;
+      text-decoration: none;
+      font-size: 14px;
+  }
+  #settings-nav a:hover {
+      background: #eef6ff;
+  }
+  #settings-nav a.active {
+      background: #e3f2fd;
+      color: #0d47a1;
+      font-weight: 600;
+  }
+  #settings-content:focus { outline: none; }
+  
+  /* Toolbar */
+  #settings-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 0 18px 0;
+      border-bottom: 1px dashed #e0e0e0;
+      margin-bottom: 20px;
+  }
+  #settings-toolbar input[type="search"] {
+      flex: 1;
+      max-width: 420px;
+      padding: 8px 10px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 14px;
+  }
+  #settings-toolbar label.inline { display: inline-flex; align-items: center; gap: 8px; color: #444; }
+
+  /* Actions */
+  .settings-actions { display: flex; align-items: center; gap: 12px; margin-top: 24px; }
+  button.secondary { background: #f1f5f9; color: #0f172a; }
+  button.secondary:hover { background: #e2e8f0; }
+
+  /* Advanced toggle behavior */
+  .advanced-hidden [data-advanced="true"] { display: none !important; }
+
+  /* Search highlight (minimal) */
+  .search-hidden { display: none !important; }
+</style>
 </head>
 <body>
     <h1>FastBrowse Settings</h1>
-    
-    <div class="section">
+
+    <div id="settings-toolbar" role="region" aria-label="Settings toolbar">
+        <input id="settings-search" type="search" placeholder="Search settings..." aria-label="Search settings">
+        <label class="inline">
+            <input type="checkbox" id="show-advanced">
+            Show advanced
+        </label>
+    </div>
+
+    <div class="settings-layout">
+        <nav id="settings-nav" aria-label="Settings navigation"></nav>
+        <main id="settings-content" class="advanced-hidden" tabindex="-1">
+            <div class="section" id="help-section">
+                <h2>Quick start</h2>
+                <p>Recommended defaults for most users:</p>
+                <ul>
+                    <li>Auto-suspend inactive tabs after 30 minutes</li>
+                    <li>Protect pinned tabs and tabs playing audio</li>
+                    <li>Enable smart memory alerts</li>
+                </ul>
+                <p>Use the search above to find settings. Toggle “Show advanced” to reveal power-user options.</p>
+            </div>
+
+            <div class="section">
         <h2>Memory Management</h2>
         
         <label>
@@ -109,7 +196,7 @@
         </label>
         <div class="description">Automatically suspend tabs when system memory usage exceeds the threshold</div>
         
-        <div class="subsection" style="margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 6px;">
+        <div class="subsection" data-advanced="true" style="margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 6px;">
             <h3 style="margin: 0 0 15px 0; font-size: 16px; color: #333;">🗜️ Memory Compression for Suspended Tabs</h3>
             <label>
                 <input type="checkbox" id="memory-compression-enabled">
@@ -777,7 +864,7 @@
             </label>
         </div>
 
-        <div class="subsection" style="margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 6px;">
+        <div class="subsection" data-advanced="true" style="margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 6px;">
             <h3 style="margin: 0 0 15px 0; font-size: 16px; color: #333;">Render-Blocking CSS Optimizer</h3>
             <label>
                 <input type="checkbox" id="css-defer-enabled">
@@ -790,7 +877,7 @@
             </div>
         </div>
 
-        <div class="subsection" style="margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 6px;">
+        <div class="subsection" data-advanced="true" style="margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 6px;">
             <h3 style="margin: 0 0 15px 0; font-size: 16px; color: #333;">JavaScript Deferral</h3>
             <label>
                 <input type="checkbox" id="js-deferral-enabled">
@@ -964,8 +1051,14 @@
         </div>
     </div>
     
-    <button id="save">Save Settings</button>
-    <span class="save-status" id="save-status"></span>
+        </main>
+    </div>
+
+    <div class="settings-actions">
+        <button id="save">Save Settings</button>
+        <button id="reset-defaults" class="secondary" type="button">Restore defaults</button>
+        <span class="save-status" id="save-status"></span>
+    </div>
     
     <script src="options.js"></script>
 </body>

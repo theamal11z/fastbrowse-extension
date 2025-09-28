@@ -174,7 +174,13 @@ class OptionsManager {
             detectedWorkflow: document.getElementById('detected-workflow'),
             lastContextCheck: document.getElementById('last-context-check'),
             saveButton: document.getElementById('save'),
-            saveStatus: document.getElementById('save-status')
+            saveStatus: document.getElementById('save-status'),
+            // UX additions
+            settingsSearch: document.getElementById('settings-search'),
+            showAdvanced: document.getElementById('show-advanced'),
+            settingsNav: document.getElementById('settings-nav'),
+            settingsContent: document.getElementById('settings-content'),
+            resetDefaults: document.getElementById('reset-defaults')
         };
         
         // Work days checkboxes
@@ -199,6 +205,7 @@ class OptionsManager {
         await this.loadSpeedDashboard();
         await this.loadContextInfo();
         this.setupEventListeners();
+        this.setupUXEnhancements();
     }
     
     setupEventListeners() {
@@ -405,6 +412,11 @@ class OptionsManager {
         this.elements.saveButton.addEventListener('click', () => {
             this.saveSettings();
         });
+
+        // Restore defaults
+        if (this.elements.resetDefaults) {
+            this.elements.resetDefaults.addEventListener('click', () => this.applyDefaultsAndSave());
+        }
         
         // Auto-save on change for checkboxes
         Object.values(this.elements).forEach(element => {
@@ -1351,6 +1363,126 @@ class OptionsManager {
             }
         });
     }
+    // ===== UX Enhancements =====
+    setupUXEnhancements() {
+        try {
+            this.buildSectionNav();
+            this.setupSearchFilter();
+            this.setupAdvancedToggle();
+        } catch (e) {
+            console.warn('UX enhancements failed to initialize:', e);
+        }
+    }
+
+    buildSectionNav() {
+        if (!this.elements.settingsNav || !this.elements.settingsContent) return;
+        const nav = this.elements.settingsNav;
+        nav.innerHTML = '';
+
+        const sections = Array.from(document.querySelectorAll('#settings-content .section'));
+        const links = [];
+        sections.forEach((sec) => {
+            const h2 = sec.querySelector('h2');
+            if (!h2) return;
+            if (!h2.id) {
+                h2.id = this.slugify(h2.textContent || 'section');
+            }
+            const a = document.createElement('a');
+            a.href = `#${h2.id}`;
+            a.textContent = h2.textContent || '';
+            a.addEventListener('click', (e) => {
+                e.preventDefault();
+                document.getElementById(h2.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                history.replaceState(null, '', `#${h2.id}`);
+            });
+            nav.appendChild(a);
+            links.push(a);
+        });
+
+        // Active link tracking
+        const onScroll = () => {
+            let activeId = '';
+            for (const sec of sections) {
+                const h2 = sec.querySelector('h2');
+                if (!h2) continue;
+                const rect = h2.getBoundingClientRect();
+                if (rect.top <= 100) activeId = h2.id;
+            }
+            links.forEach((lnk) => lnk.classList.toggle('active', lnk.getAttribute('href') === `#${activeId}`));
+        };
+        document.addEventListener('scroll', onScroll, { passive: true });
+        onScroll();
+    }
+
+    setupSearchFilter() {
+        const input = this.elements.settingsSearch;
+        const container = this.elements.settingsContent;
+        if (!input || !container) return;
+        const sections = Array.from(container.querySelectorAll('.section'));
+        const index = sections.map(sec => ({
+            el: sec,
+            text: (sec.textContent || '').toLowerCase()
+        }));
+        const apply = () => {
+            const q = (input.value || '').trim().toLowerCase();
+            if (!q) {
+                index.forEach(({ el }) => el.classList.remove('search-hidden'));
+                return;
+            }
+            index.forEach(({ el, text }) => {
+                el.classList.toggle('search-hidden', !text.includes(q));
+            });
+        };
+        input.addEventListener('input', apply);
+        apply();
+    }
+
+    setupAdvancedToggle() {
+        const checkbox = this.elements.showAdvanced;
+        const content = this.elements.settingsContent;
+        if (!checkbox || !content) return;
+        const apply = () => {
+            content.classList.toggle('advanced-hidden', !checkbox.checked);
+        };
+        checkbox.addEventListener('change', apply);
+        apply();
+    }
+
+    slugify(text) {
+        return (text || '')
+            .toLowerCase()
+            .replace(/[^a-z0-9\s-]/g, '')
+            .trim()
+            .replace(/\s+/g, '-')
+            .substring(0, 64);
+    }
+
+    applyDefaultsAndSave() {
+        try {
+            // Minimal sensible defaults for common users
+            if (this.elements.autoSuspend) this.elements.autoSuspend.checked = true;
+            if (this.elements.suspendDelay) this.elements.suspendDelay.value = 30;
+            if (this.elements.suspendDelayValue) this.elements.suspendDelayValue.textContent = '30';
+            if (this.elements.memoryThreshold) this.elements.memoryThreshold.checked = true;
+            if (this.elements.memoryLimit) this.elements.memoryLimit.value = 80;
+            if (this.elements.memoryLimitValue) this.elements.memoryLimitValue.textContent = '80';
+            if (this.elements.memorySmartMode) this.elements.memorySmartMode.checked = true;
+            if (this.elements.protectPinned) this.elements.protectPinned.checked = true;
+            if (this.elements.protectAudio) this.elements.protectAudio.checked = true;
+            if (this.elements.protectForms) this.elements.protectForms.checked = true;
+            // Reasonable defaults for some advanced features (kept off or safe)
+            if (this.elements.cssDeferEnabled) this.elements.cssDeferEnabled.checked = false;
+            if (this.elements.jsDeferralEnabled) this.elements.jsDeferralEnabled.checked = false;
+            if (this.elements.jsDeferralMode) this.elements.jsDeferralMode.value = 'safe';
+            if (this.elements.smartCacheEnabled) this.elements.smartCacheEnabled.checked = true;
+            if (this.elements.aggressivePrefetchEnabled) this.elements.aggressivePrefetchEnabled.checked = true;
+
+            this.saveSettings();
+        } catch (e) {
+            console.error('Failed to apply defaults:', e);
+            this.showStatus('Failed to apply defaults', 'error');
+        }
+    }
 }
 
 // Initialize options page when DOM is loaded
@@ -1358,8 +1490,9 @@ document.addEventListener('DOMContentLoaded', () => {
     new OptionsManager();
 });
 
-// Add some helpful information and tips
+// Add some helpful information and tips only if help-section is absent
 document.addEventListener('DOMContentLoaded', () => {
+    if (document.getElementById('help-section')) return;
     // Add keyboard shortcuts info
     const infoSection = document.createElement('div');
     infoSection.className = 'section';
