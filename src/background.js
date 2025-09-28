@@ -183,7 +183,11 @@ this.settings = {
             pocketTreatSavedAsArchivable: true,
             pocketSuggestCooldownMinutes: 120,
             syncAwareSuspend: true,
-            recentlySyncedGraceMinutes: 60
+            recentlySyncedGraceMinutes: 60,
+            // Quick Firefox Wins
+            aboutMemoryIntegration: true,
+            startupOptimizerEnabled: true,
+            startupPauseBackgroundLoad: true
         };
         
         this.suspendedTabs = new Map();
@@ -324,6 +328,15 @@ this.settings = {
 
         // Platform-aware tuning (Linux)
         try { await this.initPlatformTuning(); } catch (_) {}
+
+        // Startup optimizer
+        try {
+            if (this.settings.startupOptimizerEnabled && chrome.runtime && chrome.runtime.onStartup) {
+                chrome.runtime.onStartup.addListener(() => {
+                    try { this.optimizeStartup().catch(()=>{}); } catch(_) {}
+                });
+            }
+        } catch (_) {}
         // Load learned leak domains
         try {
             const stored = await chrome.storage.local.get(['fastbrowse_leak_domains']);
@@ -1828,6 +1841,26 @@ this.restorationStats.memoryOptimized++;
             const created = await chrome.tabs.create({ url: tab.url, index: tab.index + 1, windowId: tab.windowId, cookieStoreId });
             return { newTabId: created.id };
         } catch (e) { return { error: e.message }; }
+    }
+
+    // Startup optimizer
+    async optimizeStartup() {
+        try {
+            const tabs = await chrome.tabs.query({});
+            if (!tabs || tabs.length === 0) return;
+            // Pause background tab loading by discarding non-active loading tabs
+            if (this.settings.startupPauseBackgroundLoad) {
+                const pause = tabs.filter(t => !t.active && t.status === 'loading' && t.url && t.url.startsWith('http'));
+                for (const t of pause) {
+                    try { await this.suspendTabAlternative(t.id, t); } catch (_) {}
+                }
+            }
+            // Gradual restore important tabs in priority order
+            const candidates = tabs.filter(t => !t.active && t.url && t.url.startsWith('http'))
+                .map(t => t.id);
+            if (candidates.length === 0) return;
+            await this.progressiveRestoreAllTabs(candidates, { delay: this.settings.progressiveRestorationDelay, maxConcurrent: this.settings.maxConcurrentRestorations });
+        } catch (_) {}
     }
 
     // Helper method for safe tab debugging
@@ -3634,6 +3667,15 @@ this.restorationStats.memoryOptimized++;
                 case 'ffOpenAboutProcesses':
                     try { await chrome.tabs.create({ url: 'about:processes' }); sendResponse({ success: true }); } catch (e) { sendResponse({ success: false, error: e.message }); }
                     break;
+                case 'openAboutMemory':
+                    try { await chrome.tabs.create({ url: 'about:memory' }); sendResponse({ success: true }); } catch (e) { sendResponse({ success: false, error: e.message }); }
+                    break;
+                case 'ghostCleanup':
+                    try { const r = await this.performGhostCleanup(); sendResponse({ success: true, data: r }); } catch (e) { sendResponse({ success: false, error: e.message }); }
+                    break;
+                case 'optimizeStartupNow':
+                    try { await this.optimizeStartup(); sendResponse({ success: true }); } catch (e) { sendResponse({ success: false, error: e.message }); }
+                    break;
                 case 'applyLinuxTuning':
                     try { await this.initPlatformTuning(); sendResponse({ success: true, data: this.settings }); } catch (e) { sendResponse({ success: false, error: e.message }); }
                     break;
@@ -5188,6 +5230,24 @@ class ContextAwareFocus {
         
         return rules;
     }
+    }
+
+    async performGhostCleanup() {
+        const res = await this.detectZombieTabs();
+        const list = (res && res.suspected) || [];
+        let acted = 0;
+        for (const item of list) {
+            try {
+                const t = await chrome.tabs.get(item.tabId);
+                // Prefer navigation-based suspend to drop process memory
+                await this.suspendTabAlternative(t.id, t);
+                acted++;
+            } catch (_) {}
+        }
+        if (acted > 0 && this.settings.showNotifications) {
+            this.showNotification(`🧹 Ghost cleanup: suspended ${acted} tab(s)`);
+        }
+        return { acted };
     }
 
     async detectZombieTabs() {
