@@ -4055,6 +4055,51 @@ this.restorationStats.memoryOptimized++;
             for (let i = 0; i < 10; i++) {
                 existingItems.push(`assign-tag-${i}`);
             }
+            
+            // Use Promise-based removal with proper error handling
+            const removePromises = existingItems.map(id => {
+                return new Promise((resolve) => {
+                    chrome.contextMenus.remove(id, () => {
+                        // Ignore chrome.runtime.lastError - item might not exist
+                        if (chrome.runtime.lastError) {
+                            console.debug(`Context menu item ${id} doesn't exist, skipping removal`);
+                        }
+                        resolve();
+                    });
+                });
+            });
+            
+            // Wait for all removals to complete
+            await Promise.all(removePromises);
+            
+            // Small delay to ensure removals are processed
+            await new Promise(resolve => setTimeout(resolve, 50));
+            
+            if (frequentTags.length > 0) {
+                await this.createContextMenuSafe({
+                    id: 'assign-tag-separator',
+                    parentId: 'fastbrowse-tags',
+                    type: 'separator',
+                    contexts: ['page', 'action']
+                });
+                
+                for (let index = 0; index < frequentTags.length; index++) {
+                    const tag = frequentTags[index];
+                    await this.createContextMenuSafe({
+                        id: `assign-tag-${index}`,
+                        parentId: 'fastbrowse-tags',
+                        title: `📌 Assign "${tag.name}"`,
+                        contexts: ['page', 'action']
+                    });
+                }
+            }
+            
+        } catch (error) {
+            console.error('Failed to update context menu tags:', error);
+        } finally {
+            this._updatingContextMenus = false;
+        }
+    }
     
     // Intelligent cache clear: clears browser cache then re-warms important origins
     async runIntelligentCacheClear() {
@@ -4253,51 +4298,6 @@ this.restorationStats.memoryOptimized++;
             }
         } catch (e) {
             console.debug('applyPerformancePreset failed', e);
-        }
-    }
-            
-            // Use Promise-based removal with proper error handling
-            const removePromises = existingItems.map(id => {
-                return new Promise((resolve) => {
-                    chrome.contextMenus.remove(id, () => {
-                        // Ignore chrome.runtime.lastError - item might not exist
-                        if (chrome.runtime.lastError) {
-                            console.debug(`Context menu item ${id} doesn't exist, skipping removal`);
-                        }
-                        resolve();
-                    });
-                });
-            });
-            
-            // Wait for all removals to complete
-            await Promise.all(removePromises);
-            
-            // Small delay to ensure removals are processed
-            await new Promise(resolve => setTimeout(resolve, 50));
-            
-            if (frequentTags.length > 0) {
-                await this.createContextMenuSafe({
-                    id: 'assign-tag-separator',
-                    parentId: 'fastbrowse-tags',
-                    type: 'separator',
-                    contexts: ['page', 'action']
-                });
-                
-                for (let index = 0; index < frequentTags.length; index++) {
-                    const tag = frequentTags[index];
-                    await this.createContextMenuSafe({
-                        id: `assign-tag-${index}`,
-                        parentId: 'fastbrowse-tags',
-                        title: `📌 Assign "${tag.name}"`,
-                        contexts: ['page', 'action']
-                    });
-                }
-            }
-            
-        } catch (error) {
-            console.error('Failed to update context menu tags:', error);
-        } finally {
-            this._updatingContextMenus = false;
         }
     }
     

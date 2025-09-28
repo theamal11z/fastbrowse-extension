@@ -353,7 +353,6 @@ class OptionsManager {
         if (this.elements.turboModeToggle) this.elements.turboModeToggle.addEventListener('change', () => this.toggleTurbo());
         if (this.elements.applyPresetBtn) this.elements.applyPresetBtn.addEventListener('click', () => this.applyPreset());
         if (this.elements.oneClickOptimizeBtn) this.elements.oneClickOptimizeBtn.addEventListener('click', () => this.oneClickOptimize());
-        }
 
         // Speed Dashboard listeners
         if (this.elements.speedDashboardEnabled) this.elements.speedDashboardEnabled.addEventListener('change', () => this.saveSettings());
