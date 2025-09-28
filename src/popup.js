@@ -1,6 +1,16 @@
 // FastBrowse Popup Script
 // Handles UI interactions and communication with background script
 
+// Cross-browser shim: map chrome.* to browser.* in Firefox so async/await works
+(function(){
+  try {
+    const isFirefox = typeof browser !== 'undefined' && browser && typeof browser.runtime !== 'undefined';
+    if (isFirefox) {
+      globalThis.chrome = browser;
+    }
+  } catch (_) {}
+})();
+
 class PopupManager {
     constructor() {
         this.memoryUsageElement = document.getElementById('memory-usage');
@@ -113,6 +123,13 @@ class PopupManager {
         this.restorationUpdateInterval = null;
         
         this.init();
+
+        // UX additions
+        this.navOverviewBtn = document.getElementById('tab-overview');
+        this.navTagsBtn = document.getElementById('tab-tags');
+        this.navSettingsBtn = document.getElementById('tab-settings');
+        this.overviewSection = document.getElementById('overview-section');
+        this.tabSearch = document.getElementById('tab-search');
     }
     
     async init() {
@@ -124,6 +141,8 @@ class PopupManager {
             await this.loadRestorationState();
             await this.loadContextInfo();
             this.setupEventListeners();
+            this.setupNavigation();
+            this.setupTabSearch();
             this.startRestorationMonitoring();
         } catch (error) {
             console.error('Failed to initialize popup:', error);
@@ -185,6 +204,29 @@ class PopupManager {
             this.showFocusRecommendations();
         });
         
+        // Navigation tab listeners
+        if (this.navOverviewBtn && this.navTagsBtn && this.navSettingsBtn) {
+            const setActive = (btn) => {
+                [this.navOverviewBtn, this.navTagsBtn, this.navSettingsBtn].forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                this.navOverviewBtn.setAttribute('aria-selected', btn === this.navOverviewBtn ? 'true' : 'false');
+                this.navTagsBtn.setAttribute('aria-selected', btn === this.navTagsBtn ? 'true' : 'false');
+                this.navSettingsBtn.setAttribute('aria-selected', btn === this.navSettingsBtn ? 'true' : 'false');
+            };
+            this.navOverviewBtn.addEventListener('click', () => {
+                setActive(this.navOverviewBtn);
+                this.showSection('overview');
+            });
+            this.navTagsBtn.addEventListener('click', () => {
+                setActive(this.navTagsBtn);
+                this.showSection('tags');
+            });
+            this.navSettingsBtn.addEventListener('click', () => {
+                setActive(this.navSettingsBtn);
+                this.showSection('settings');
+            });
+        }
+
         // Tag management event listeners
         this.showAllTabsButton.addEventListener('click', () => {
             this.setFilter('all');
@@ -369,6 +411,16 @@ class PopupManager {
         
         // Apply current filter
         let filteredTabs = this.filterTabs(tabs);
+
+        // Apply text search filter
+        const q = (this.tabSearch && this.tabSearch.value || '').trim().toLowerCase();
+        if (q) {
+            filteredTabs = filteredTabs.filter(tab => {
+                const title = (tab.title || '').toLowerCase();
+                const url = (tab.url || '').toLowerCase();
+                return title.includes(q) || url.includes(q);
+            });
+        }
         
         // Clear existing list
         this.tabListElement.innerHTML = '';
@@ -406,6 +458,30 @@ class PopupManager {
                 this.tabListElement.appendChild(tabItem);
             });
         });
+    }
+
+    setupNavigation() {
+        // Ensure default visible state
+        this.showSection('overview');
+    }
+
+    showSection(section) {
+        // Sections: overview (overviewSection), tags (tagsSectionElement), settings (settingsSection)
+        if (this.overviewSection) this.overviewSection.style.display = (section === 'overview') ? 'block' : 'none';
+        if (this.tagsSectionElement) this.tagsSectionElement.style.display = (section === 'tags') ? 'block' : 'none';
+        if (this.settingsSection) this.settingsSection.style.display = (section === 'settings') ? 'block' : 'none';
+        // When switching to settings, load inline settings
+        if (section === 'settings') {
+            this.loadInlineSettings();
+        }
+    }
+
+    setupTabSearch() {
+        if (!this.tabSearch) return;
+        const apply = () => {
+            if (this.currentTabs.length > 0) this.renderTabList(this.currentTabs);
+        };
+        this.tabSearch.addEventListener('input', apply);
     }
     
     // ============================================================================
@@ -882,6 +958,22 @@ class PopupManager {
     }
     
     populateMusicOptions(tracks) {
+        // Disable music controls when offscreen API is not available (e.g., Firefox)
+        try {
+            const offscreenSupported = !!(chrome && chrome.offscreen && (chrome.offscreen.createDocument || chrome.offscreen.hasDocument));
+            if (!offscreenSupported) {
+                if (this.setFocusMusic) {
+                    this.setFocusMusic.innerHTML = '';
+                    const opt = document.createElement('option');
+                    opt.value = 'none';
+                    opt.textContent = 'None (not supported in Firefox)';
+                    this.setFocusMusic.appendChild(opt);
+                    this.setFocusMusic.disabled = true;
+                }
+                if (this.previewFocusMusicButton) this.previewFocusMusicButton.disabled = true;
+                return;
+            }
+        } catch (_) {}
         if (!this.setFocusMusic) return;
         this.setFocusMusic.innerHTML = '';
         const add = (value, label) => {
