@@ -768,6 +768,17 @@
             50% { opacity: 0.5; transform: scale(1.2); }
         }
     </style>
+<style>
+  /* Popup navigation tabs */
+  .nav-tabs { display: flex; gap: 6px; margin: 0 0 12px 0; }
+  .nav-tabs button { flex: 1; padding: 6px 8px; font-size: 12px; background: #f1f5f9; color: #0f172a; border: 1px solid #e2e8f0; border-radius: 6px; }
+  .nav-tabs button.active { background: #e3f2fd; color: #0d47a1; border-color: #bbdefb; }
+
+  /* Tab search */
+  #tab-search { width: 100%; padding: 6px 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 12px; margin: 8px 0; }
+
+  .hidden { display: none !important; }
+</style>
 </head>
 <body>
     <div class="header">
@@ -782,6 +793,14 @@
             </button>
         </div>
     </div>
+
+    <div class="nav-tabs" role="tablist" aria-label="Popup sections">
+        <button id="tab-overview" class="active" aria-selected="true">Overview</button>
+        <button id="tab-tags" aria-selected="false">Tags</button>
+        <button id="tab-settings" aria-selected="false">Settings</button>
+    </div>
+    
+    <div id="overview-section">
     
     <div class="memory-info">
         <div class="memory-usage">
@@ -873,10 +892,13 @@
         </div>
     </div>
     
+    <input id="tab-search" type="search" placeholder="Search tabs by title or URL..." aria-label="Search tabs">
     <div class="tab-list" id="tab-list">
         <!-- Tab items will be populated here -->
     </div>
     
+    </div> <!-- end overview-section -->
+
     <div class="tags-section" id="tags-section" style="display: none;">
         <h3>🏷️ Tag Management</h3>
         <div class="tag-controls">
