@@ -1514,6 +1514,62 @@ document.addEventListener('DOMContentLoaded', () => {
     new OptionsManager();
 });
 
+// Firefox-Centric Performance section (added programmatically to avoid heavy HTML changes)
+document.addEventListener('DOMContentLoaded', () => {
+    const ffSection = document.createElement('div');
+    ffSection.className = 'section';
+    const h2ff = document.createElement('h2'); h2ff.textContent = 'Firefox-Centric Performance'; ffSection.appendChild(h2ff);
+
+    const toggleRow = document.createElement('div');
+    const lbl = document.createElement('label');
+    const cb = document.createElement('input'); cb.type = 'checkbox'; cb.id = 'ff-prefer-alt';
+    lbl.appendChild(cb); lbl.appendChild(document.createTextNode(' Prefer Electrolysis-aware suspension'));
+    toggleRow.appendChild(lbl); ffSection.appendChild(toggleRow);
+
+    const actions = document.createElement('div'); actions.style.display='flex'; actions.style.gap='8px'; actions.style.marginTop='8px';
+    const btnZombie = document.createElement('button'); btnZombie.textContent = 'Check Zombie Tabs'; actions.appendChild(btnZombie);
+    const btnCache = document.createElement('button'); btnCache.textContent = 'Clear HTTP Cache'; actions.appendChild(btnCache);
+    const btnIDB = document.createElement('button'); btnIDB.textContent = 'Optimize IndexedDB (recent)'; actions.appendChild(btnIDB);
+    const btnProfiles = document.createElement('button'); btnProfiles.textContent = 'Open About Profiles'; actions.appendChild(btnProfiles);
+    const btnSupport = document.createElement('button'); btnSupport.className='secondary'; btnSupport.textContent = 'Open Troubleshooting'; actions.appendChild(btnSupport);
+    ffSection.appendChild(actions);
+
+    const res = document.createElement('div'); res.id='ff-result'; res.style.fontSize='12px'; res.style.color='#555'; res.style.marginTop='6px'; ffSection.appendChild(res);
+
+    // Initialize toggle from settings
+    this && this.elements; // hint to bundlers
+    try { chrome.runtime.sendMessage({ action: 'getSettings' }, (r)=>{ try { cb.checked = !!(r && r.success && r.data && r.data.ffPreferAltSuspend); } catch(_){} }); } catch(_){}
+    cb.addEventListener('change', ()=>{ try { chrome.runtime.sendMessage({ action: 'ffSetPreferAltSuspend', enable: cb.checked }, ()=>{}); } catch(_){} });
+
+    btnZombie.addEventListener('click', ()=>{
+        try {
+            res.textContent = 'Scanning...';
+            chrome.runtime.sendMessage({ action: 'detectZombieTabs' }, (resp)=>{
+                if (resp && resp.success) {
+                    const n = (resp.data && resp.data.suspected && resp.data.suspected.length) || 0;
+                    res.textContent = n === 0 ? 'No zombie tabs suspected.' : `Suspected zombie tabs: ${n}`;
+                } else {
+                    res.textContent = 'Zombie check failed';
+                }
+            });
+        } catch(_) { res.textContent = 'Zombie check failed'; }
+    });
+
+    btnCache.addEventListener('click', ()=>{
+        res.textContent = 'Clearing cache...';
+        try { chrome.runtime.sendMessage({ action: 'ffProfileClearHttpCache' }, (r)=>{ res.textContent = r && r.success ? 'HTTP cache cleared' : 'Failed to clear cache'; }); } catch(_) { res.textContent='Failed'; }
+    });
+    btnIDB.addEventListener('click', ()=>{
+        res.textContent = 'Optimizing IndexedDB...';
+        try { chrome.runtime.sendMessage({ action: 'ffProfileClearIndexedDBRecent' }, (r)=>{ const c=r&&r.success && r.data? r.data.count:0; res.textContent = r&&r.success? `Optimized ${c} origin(s)`:'Failed'; }); } catch(_) { res.textContent='Failed'; }
+    });
+    btnProfiles.addEventListener('click', ()=>{ try { chrome.runtime.sendMessage({ action: 'ffOpenAboutProfiles' }, ()=>{}); } catch(_){} });
+    btnSupport.addEventListener('click', ()=>{ try { chrome.runtime.sendMessage({ action: 'ffOpenTroubleshooting' }, ()=>{}); } catch(_){} });
+
+    const container = document.getElementById('settings-content') || document.body;
+    container.appendChild(ffSection);
+});
+
 // Add some helpful information and tips only if help-section is absent
 document.addEventListener('DOMContentLoaded', () => {
     if (document.getElementById('help-section')) return;

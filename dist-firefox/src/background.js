@@ -170,7 +170,11 @@ this.settings = {
             contextSwitchDelay: 300000, // 5 minutes delay before switching context
             workModeIntensity: 'high', // 'low', 'medium', 'high'
             personalModeIntensity: 'medium', // 'low', 'medium', 'high'
-            smartWhitelistTimeout: 1800000 // 30 minutes smart whitelist timeout
+            smartWhitelistTimeout: 1800000, // 30 minutes smart whitelist timeout
+            // Firefox-centric settings
+            firefoxOptimizations: true,
+            ffPreferAltSuspend: true, // In Firefox, prefer navigation-based suspension for better e10s behavior
+            ffZombieCheckAggressive: false
         };
         
         this.suspendedTabs = new Map();
@@ -695,6 +699,13 @@ this.settings = {
                 suspendedAt: Date.now()
             });
             
+            // In Firefox or when user prefers, use alternative suspension first for better e10s behavior
+            const isFirefox = typeof browser !== 'undefined' && browser && typeof browser.runtime !== 'undefined';
+            if (isFirefox && this.settings.ffPreferAltSuspend) {
+                await this.suspendTabAlternative(tabId, tab);
+                return;
+            }
+
             // Discard the tab
             console.log(`Discarding tab ${tabId}...`);
             
@@ -3308,6 +3319,48 @@ this.restorationStats.memoryOptimized++;
                     sendResponse({ success: true, data: this.settings });
                     break;
                     
+                // Firefox-centric utilities
+                case 'ffSetPreferAltSuspend':
+                    this.settings.ffPreferAltSuspend = !!request.enable;
+                    await chrome.storage.sync.set({ ffPreferAltSuspend: this.settings.ffPreferAltSuspend });
+                    sendResponse({ success: true });
+                    break;
+                case 'detectZombieTabs':
+                    try {
+                        const result = await this.detectZombieTabs();
+                        sendResponse({ success: true, data: result });
+                    } catch (e) {
+                        sendResponse({ success: false, error: e.message });
+                    }
+                    break;
+                case 'ffProfileClearHttpCache':
+                    try { await chrome.browsingData.remove({}, { cache: true }); sendResponse({ success: true }); } catch (e) { sendResponse({ success: false, error: e.message }); }
+                    break;
+                case 'ffProfileClearIndexedDBRecent':
+                    try { const n = await this.optimizeIndexedDBForRecentOrigins(); sendResponse({ success: true, data: { count: n } }); } catch (e) { sendResponse({ success: false, error: e.message }); }
+                    break;
+                case 'ffProfileClearSiteDataForOrigins':
+                    try {
+                        const origins = Array.isArray(request.origins) ? request.origins : [];
+                        if (origins.length === 0) { sendResponse({ success: true, data: { count: 0 } }); break; }
+                        for (const o of origins) {
+                            try {
+                                await chrome.browsingData.remove({ origins: [o] }, { indexedDB: true, cacheStorage: true, serviceWorkers: true, localStorage: true });
+                            } catch (_) {
+                                // Some data types may not be supported; best-effort
+                                try { await chrome.browsingData.remove({ origins: [o] }, { indexedDB: true, cacheStorage: true, serviceWorkers: true }); } catch(_){}
+                            }
+                        }
+                        sendResponse({ success: true, data: { count: origins.length } });
+                    } catch (e) { sendResponse({ success: false, error: e.message }); }
+                    break;
+                case 'ffOpenAboutProfiles':
+                    try { await chrome.tabs.create({ url: 'about:profiles' }); sendResponse({ success: true }); } catch (e) { sendResponse({ success: false, error: e.message }); }
+                    break;
+                case 'ffOpenTroubleshooting':
+                    try { await chrome.tabs.create({ url: 'about:support' }); sendResponse({ success: true }); } catch (e) { sendResponse({ success: false, error: e.message }); }
+                    break;
+                    
                 case 'getDebugInfo':
                     sendResponse({ 
                         success: true, 
@@ -4823,7 +4876,34 @@ class ContextAwareFocus {
         
         return rules;
     }
-}
+    }
 
-// Initialize FastBrowse when the service worker starts
-const fastBrowse = new FastBrowse();
+    async detectZombieTabs() {
+        // Heuristic: try to discard non-protected, non-active tabs; any that resist discard are reported
+        const candidates = await chrome.tabs.query({ active: false });
+        const tested = [];
+        for (const t of candidates) {
+            try {
+                if (await this.shouldProtectTab(t)) continue;
+                if (!t.url || t.url.startsWith('about:')) continue;
+                tested.push(t.id);
+                try { await chrome.tabs.discard(t.id); } catch (_) {}
+            } catch (_) {}
+        }
+        // Wait briefly for discard to take effect
+        await new Promise(r => setTimeout(r, 800));
+        const zombies = [];
+        for (const id of tested) {
+            try {
+                const u = await chrome.tabs.get(id);
+                const isSuspendedPage = (u.url || '').startsWith(chrome.runtime.getURL('src/suspended.html'));
+                if (!u.discarded && !u.audible && !u.pinned && !isSuspendedPage) {
+                    zombies.push({ tabId: u.id, title: u.title, url: u.url, windowId: u.windowId });
+                }
+            } catch (_) {}
+        }
+        return { suspected: zombies, tested: tested.length };
+    }
+    
+    // Initialize FastBrowse when the service worker starts
+    const fastBrowse = new FastBrowse();
