@@ -321,6 +321,9 @@ this.settings = {
                 await this.initFirefoxIntegration();
             }
         } catch (_) {}
+
+        // Platform-aware tuning (Linux)
+        try { await this.initPlatformTuning(); } catch (_) {}
         // Load learned leak domains
         try {
             const stored = await chrome.storage.local.get(['fastbrowse_leak_domains']);
@@ -1712,6 +1715,22 @@ this.restorationStats.memoryOptimized++;
             identities.forEach(ci => this.ffContainers.set(ci.cookieStoreId, ci));
         } catch (_) {}
         await this.loadFirefoxPrivacyContext();
+    }
+
+    async initPlatformTuning() {
+        try {
+            const info = await chrome.runtime.getPlatformInfo();
+            this.platformInfo = info;
+            if (info && (info.os || '').toLowerCase() === 'linux' && !this.settings.linuxTuningApplied) {
+                // Conservative, safe tweaks for Linux
+                this.settings.progressiveRestorationDelay = Math.max(this.settings.progressiveRestorationDelay, 1200);
+                this.settings.prefetchOnHoverEnabled = false; // reduce network churn on some Linux setups
+                this.settings.gpuMode = this.settings.gpuMode || 'balanced';
+                this.settings.webglProfile = this.settings.webglProfile || 'performance';
+                this.settings.linuxTuningApplied = true;
+                try { await chrome.storage.sync.set(this.settings); } catch (_) {}
+            }
+        } catch (_) {}
     }
 
     async loadFirefoxPrivacyContext() {
@@ -3614,6 +3633,20 @@ this.restorationStats.memoryOptimized++;
                     break;
                 case 'ffOpenAboutProcesses':
                     try { await chrome.tabs.create({ url: 'about:processes' }); sendResponse({ success: true }); } catch (e) { sendResponse({ success: false, error: e.message }); }
+                    break;
+                case 'applyLinuxTuning':
+                    try { await this.initPlatformTuning(); sendResponse({ success: true, data: this.settings }); } catch (e) { sendResponse({ success: false, error: e.message }); }
+                    break;
+                case 'testNativeHost':
+                    try {
+                        // Optional: requires nativeMessaging permission and installed host
+                        const port = chrome.runtime.connectNative ? chrome.runtime.connectNative('fastbrowse.host') : null;
+                        if (!port) { sendResponse({ success: false, error: 'nativeMessaging not available' }); break; }
+                        let done = false;
+                        port.onMessage.addListener((msg)=>{ if (!done) { done = true; sendResponse({ success: true, data: msg }); port.disconnect(); } });
+                        port.onDisconnect.addListener(()=>{ if (!done) { done = true; sendResponse({ success: false, error: chrome.runtime.lastError ? chrome.runtime.lastError.message : 'Disconnected' }); } });
+                        try { port.postMessage({ op: 'ping', ts: Date.now() }); } catch (e) { sendResponse({ success: false, error: e.message }); }
+                    } catch (e) { sendResponse({ success: false, error: e.message }); }
                     break;
                     
                 case 'getDebugInfo':

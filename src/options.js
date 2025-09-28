@@ -1602,10 +1602,12 @@ document.addEventListener('DOMContentLoaded', () => {
     presets.forEach(p=> presetWrap.appendChild(mkCard(p)));
     tweaks.appendChild(presetWrap);
 
-    const manageRow = document.createElement('div'); manageRow.style.display='flex'; manageRow.style.gap='8px'; manageRow.style.marginTop='8px';
+    const manageRow = document.createElement('div'); manageRow.style.display='flex'; manageRow.style.flexWrap='wrap'; manageRow.style.gap='8px'; manageRow.style.marginTop='8px';
     const btnAboutPerf = document.createElement('button'); btnAboutPerf.textContent='Open about:performance'; btnAboutPerf.addEventListener('click', ()=>{ try { chrome.runtime.sendMessage({ action:'ffOpenAboutPerformance' }, ()=>{});} catch(_){} });
     const btnAboutProc = document.createElement('button'); btnAboutProc.textContent='Open about:processes'; btnAboutProc.addEventListener('click', ()=>{ try { chrome.runtime.sendMessage({ action:'ffOpenAboutProcesses' }, ()=>{});} catch(_){} });
-    manageRow.appendChild(btnAboutPerf); manageRow.appendChild(btnAboutProc);
+    const btnLinuxTune = document.createElement('button'); btnLinuxTune.textContent='Apply Linux tuning (safe)'; btnLinuxTune.addEventListener('click', ()=>{ try { chrome.runtime.sendMessage({ action:'applyLinuxTuning' }, (r)=>{ res.textContent = r && r.success ? 'Linux tuning applied' : 'Failed'; setTimeout(()=>res.textContent='',1500); }); } catch(_){} });
+    const btnNativeTest = document.createElement('button'); btnNativeTest.className='secondary'; btnNativeTest.textContent='Test native host'; btnNativeTest.addEventListener('click', ()=>{ try { chrome.runtime.sendMessage({ action:'testNativeHost' }, (r)=>{ res.textContent = r && r.success ? 'Native host responded' : (r && r.error ? r.error : 'Native host unavailable'); setTimeout(()=>res.textContent='',2000);} ); } catch(_){} });
+    manageRow.appendChild(btnAboutPerf); manageRow.appendChild(btnAboutProc); manageRow.appendChild(btnLinuxTune); manageRow.appendChild(btnNativeTest);
     tweaks.appendChild(manageRow);
 
     const note = document.createElement('div'); note.style.fontSize='11px'; note.style.color='#666'; note.style.marginTop='6px';
