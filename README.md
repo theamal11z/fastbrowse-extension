@@ -1,6 +1,25 @@
-# FastBrowse: Advanced Chrome Extension for Memory Optimization & Focus
+# FastBrowse: Cross-Browser Extension for Memory Optimization & Focus 🦊🔗
 
-FastBrowse is a powerful Chrome extension designed to minimize browser memory consumption and eliminate distractions for enhanced productivity. It combines intelligent tab management, focus mode features, and smart extension recommendations to create the ultimate browsing experience—especially beneficial for users with limited RAM or those seeking distraction-free productivity.
+FastBrowse is a powerful cross-browser extension (Chrome & Firefox) designed to minimize browser memory consumption and eliminate distractions for enhanced productivity. It combines intelligent tab management, focus mode features, and smart extension recommendations to create the ultimate browsing experience—especially beneficial for users with limited RAM or those seeking distraction-free productivity.
+
+## 🦊 Firefox Support
+
+**New in v1.3.0**: Full Firefox compatibility with Manifest V2 support! FastBrowse now works seamlessly on both Chrome and Firefox with intelligent API detection and graceful feature degradation.
+
+### Firefox Features:
+- ✅ Complete memory management and tab suspension
+- ✅ Focus Mode with distraction removal
+- ✅ Tab grouping and auto-organization
+- ✅ Speed dashboard and performance monitoring
+- ✅ Settings customization and profiles
+- ✅ Context menus and keyboard shortcuts
+- ⚠️ Focus Music preview (disabled - uses unsupported offscreen API)
+
+### Cross-Browser Architecture:
+- **Smart API Detection**: Automatically uses `browser.*` APIs on Firefox and `chrome.*` on Chrome
+- **Graceful Degradation**: Features adapt when specific APIs aren't available
+- **Unified Codebase**: Single codebase with browser-specific builds
+- **AMO Ready**: Firefox build prepared for Mozilla Add-ons submission
 
 ## ✨ Features
 
@@ -28,6 +47,8 @@ FastBrowse is a powerful Chrome extension designed to minimize browser memory co
 - **Extension Recommendations**: Suggests complementary focus extensions (e.g., DF YouTube, News Feed Eradicator) and avoids suggesting ones you already have or suitable alternatives
 
 ### 🖥️ Interface & Usability
+- **Tabbed Popup Interface**: Organized Overview/Tags/Settings tabs for streamlined navigation and better UX
+- **Tab Search Filter**: Quick search functionality in popup to find specific tabs instantly
 - **Clean Interface**: Minimalist popup UI with real-time statistics, focus mode controls, and restoration mode management
 - **Memory-Aware Restoration Controls**: Toggle between Smart (🧠), Lite (⚡), and Full (🚀) restoration modes with live memory visualization
 - **Progressive Restoration Status**: Real-time progress tracking during batch restoration operations
@@ -46,6 +67,9 @@ FastBrowse is a powerful Chrome extension designed to minimize browser memory co
     - macOS: `"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --enable-gpu-rasterization --enable-features=ParallelDownloading`
 - **Smart Cache Management**: Aggressive pre-caching during idle, intelligent cache clearing with warming, and best‑effort cache compression toggle
 - **Profile Optimization**: IndexedDB clean-up tools per site or across recent sites (safe batch), with clear guidance and safety
+- **Speed Dashboard**: Real-time page load metrics, performance timelines, and network waterfall charts
+- **Bottleneck Identification**: Advanced performance analysis to identify slow resources and optimization opportunities
+- **Quick Session Switching**: Turbo mode with performance presets and 1-click browser optimization
 - **Configurable Settings**: Fully customizable behavior for all features
 
 ### 🏷️ Tag System & Auto Grouping
@@ -62,16 +86,46 @@ FastBrowse is a powerful Chrome extension designed to minimize browser memory co
 
 ## 🚀 Installation
 
-### From Source (Development)
+### Chrome Installation
 
+#### From Source (Development)
 1. Clone or download this repository
 2. Open Chrome and navigate to `chrome://extensions/`
 3. Enable "Developer mode" in the top-right corner
 4. Click "Load unpacked" and select the project directory
 5. The FastBrowse icon should appear in your extensions toolbar
 
-### From Chrome Web Store
+#### From Chrome Web Store
 *(Coming soon - extension will be published after testing)*
+
+### 🦊 Firefox Installation
+
+#### From Source (Development)
+1. Clone or download this repository
+2. Build the Firefox version:
+   ```bash
+   npm run build:firefox
+   ```
+3. Open Firefox and navigate to `about:debugging`
+4. Click "This Firefox" → "Load Temporary Add-on"
+5. Select any file in the `dist-firefox` folder
+6. The FastBrowse icon should appear in your extensions toolbar
+
+#### From Firefox Add-ons (AMO)
+*(Coming soon - extension will be submitted for Firefox review)*
+
+### Build Commands
+
+```bash
+# Chrome/Chromium (default)
+npm run zip                    # Creates fastbrowse-extension.zip
+npm run build                  # Lint and format code
+
+# Firefox
+npm run build:firefox          # Build Firefox version to dist-firefox/
+npm run zip:firefox            # Creates fastbrowse-firefox.zip
+npm run dev:firefox            # Run in Firefox with web-ext
+```
 
 ## 📚 How to Use
 
@@ -195,25 +249,44 @@ Notes:
 
 ## 🛠️ Technical Details
 
-### Architecture
+### Cross-Browser Architecture
 
-FastBrowse uses Chrome Extension Manifest V3 with the following components:
+FastBrowse supports both Chrome (Manifest V3) and Firefox (Manifest V2) with intelligent API detection:
+
+#### Chrome Implementation (Manifest V3):
+- **Service Worker**: Background processing with chrome.* APIs
+- **Offscreen Documents**: Audio playback for Focus Music
+- **chrome.scripting**: Dynamic content script injection
+
+#### Firefox Implementation (Manifest V2):
+- **Background Scripts**: Traditional background page with browser.* APIs  
+- **API Fallbacks**: tabs.executeScript when chrome.scripting unavailable
+- **Graceful Degradation**: Offscreen features disabled on Firefox
+
+#### Shared Components:
 
 - **Background Service Worker**: Handles tab management, memory monitoring, focus mode orchestration, and memory-aware restoration logic
 - **Popup Interface**: Provides user interface for manual tab control, focus mode management, and restoration mode selection
 - **Options Page**: Allows configuration of all settings including focus mode preferences and restoration behavior
 - **Content Scripts**: Injected into web pages for focus mode distraction removal, theme application, and lite mode media blocking
 - **Lite Mode Content Script**: Specialized script for blocking auto-playing videos, animations, and optimizing media-heavy pages
-- **Chrome APIs Used**:
-  - `chrome.tabs` - Tab management and discarding
-  - `chrome.system.memory` - Memory usage monitoring
-  - `chrome.storage` - Settings persistence across sessions
-  - `chrome.notifications` - User notifications and alerts
-  - `chrome.management` - Extension analysis and recommendations
-  - `chrome.scripting` - Dynamic content script injection for focus mode
-  - `chrome.offscreen` - Background audio playback for Focus Music (MV3-offscreen document)
-  - `chrome.action` - Badge updates for actionable items
-  - `activeTab` - Content script access for focus enhancements
+- **Cross-Browser APIs Used**:
+  - `tabs` - Tab management and discarding (chrome.tabs / browser.tabs)
+  - `system.memory` - Memory usage monitoring (Chrome only, graceful fallback on Firefox)
+  - `storage` - Settings persistence across sessions (chrome.storage / browser.storage)
+  - `notifications` - User notifications and alerts (chrome.notifications / browser.notifications)
+  - `management` - Extension analysis and recommendations (chrome.management / browser.management)
+  - `scripting` - Dynamic content script injection (Chrome MV3) / `tabs.executeScript` (Firefox MV2)
+  - `offscreen` - Background audio playback for Focus Music (Chrome MV3 only, disabled on Firefox)
+  - `action` / `browserAction` - Badge updates for actionable items (MV3 vs MV2)
+  - `activeTab` - Content script access for focus enhancements (universal)
+
+#### Firefox-Specific Considerations:
+- **Manifest V2**: Uses traditional background scripts instead of service workers
+- **browser.* APIs**: Automatically mapped from chrome.* where available
+- **Permissions Rationale**: Detailed explanations for Mozilla Add-ons review
+- **Gecko ID**: Removed for AMO to assign automatically on first upload
+- **Security Audit**: No unsafe innerHTML, eval, or remote code execution
 
 ### Memory Optimization Strategy
 
@@ -387,38 +460,60 @@ Settings (Options → Profile Optimization):
 
 ### Prerequisites
 
+#### For Chrome Development:
 - Google Chrome or Chromium browser
 - Basic knowledge of JavaScript, HTML, and CSS
 - Text editor or IDE of your choice
+
+#### For Firefox Development:
+- Firefox browser
+- Node.js and npm (for build scripts)
+- web-ext tool (optional, for automated testing): `npm install -g web-ext`
+- Knowledge of Manifest V2 vs V3 differences
 
 ### Project Structure
 
 ```
 fastbrowse-extension/
-├── manifest.json          # Extension manifest (Manifest V3)
+├── manifest.json          # Chrome extension manifest (Manifest V3)
 ├── src/
-│   ├── background.js      # Background service worker with memory-aware restoration
-│   ├── popup.html         # Popup interface HTML with restoration controls
-│   ├── popup.js           # Popup functionality and restoration management
-│   ├── options.html       # Options page HTML with restoration settings
-│   ├── options.js         # Options page functionality and restoration stats
-│   ├── offscreen.html     # Offscreen document for Focus Music playback
-│   ├── offscreen.js       # Offscreen audio controller
+│   ├── background.js      # Background service worker with cross-browser compatibility
+│   ├── popup.html         # Tabbed popup interface with Overview/Tags/Settings
+│   ├── popup.js           # Enhanced popup with search, tabs, and restoration management
+│   ├── options.html       # Comprehensive options page with all settings
+│   ├── options.js         # Settings management and performance dashboard
+│   ├── offscreen.html     # Offscreen document for Focus Music (Chrome only)
+│   ├── offscreen.js       # Audio controller for Focus Music
 │   └── content/
-│       ├── focus-mode.js      # Focus mode content script
-│       ├── focus-mode.css     # Focus mode styling
-│       ├── lite-mode.js       # Lite mode restoration content script
-│       └── state-snapshot.js  # Minimal state snapshot/restore script
+│       ├── focus-mode.js      # Focus mode distraction removal
+│       ├── focus-mode.css     # Focus mode styling and minimal theme
+│       ├── lite-mode.js       # Memory-optimized tab restoration
+│       ├── state-snapshot.js  # Form state and scroll position management
+│       ├── network-optimization.js # DNS prefetch and preload
+│       ├── page-acceleration.js    # Page load speed optimization
+│       └── performance-monitor.js  # Speed dashboard metrics
 ├── assets/
 │   ├── icon16.png         # 16x16 extension icon
+│   ├── icon32.png         # 32x32 extension icon (Firefox)
 │   ├── icon48.png         # 48x48 extension icon
+│   ├── icon96.png         # 96x96 extension icon (Firefox)
 │   ├── icon128.png        # 128x128 extension icon
 │   └── music/             # Focus Mode music assets (MP3/OGG/WAV)
-└── README.md              # This file
+├── scripts/
+│   └── build-firefox.js   # Firefox build script for Manifest V2 conversion
+├── dist-firefox/          # Firefox build output (generated)
+│   ├── manifest.json      # Firefox manifest (Manifest V2)
+│   ├── src/               # Cross-browser compatible source files
+│   └── assets/            # Icons and assets for Firefox
+├── package.json           # Project dependencies and build scripts
+├── fastbrowse-extension.zip   # Chrome build package (generated)
+├── fastbrowse-firefox.zip     # Firefox build package (generated)
+└── README.md              # This comprehensive documentation
 ```
 
-### Local Development
+### Cross-Browser Development Workflow
 
+#### Chrome Development:
 1. **Make changes** to the source code
 2. **Reload the extension**:
    - Go to `chrome://extensions/`
@@ -429,12 +524,37 @@ fastbrowse-extension/
    - Verify memory monitoring
    - Check settings persistence
 
-### Debugging
+#### Firefox Development:
+1. **Build Firefox version**: `npm run build:firefox`
+2. **Load in Firefox**:
+   - Go to `about:debugging` → "This Firefox"
+   - Click "Reload" on the FastBrowse extension
+   - Or use `npm run dev:firefox` for automated reloading
+3. **Test Firefox-specific behavior**:
+   - Verify API fallbacks work correctly
+   - Check that disabled features degrade gracefully
+   - Test browser.* API compatibility
 
+#### Cross-Browser Testing:
+- **Feature Parity**: Ensure core functionality works on both browsers
+- **API Compatibility**: Test chrome.* vs browser.* API differences
+- **Performance**: Compare memory usage and extension overhead
+- **UI Consistency**: Verify popup and options page render correctly
+
+### Cross-Browser Debugging
+
+#### Chrome Debugging:
 - **Background Script**: Use `chrome://extensions/` → FastBrowse → "service worker" link
 - **Popup**: Right-click popup → "Inspect"
 - **Options Page**: Right-click options page → "Inspect"
 - **Console Logs**: All components log important events for debugging
+
+#### Firefox Debugging:
+- **Background Script**: Go to `about:debugging` → "This Firefox" → FastBrowse → "Inspect"
+- **Popup**: Right-click popup → "Inspect Element" → "Debugger" tab
+- **Options Page**: Right-click options page → "Inspect Element"
+- **Browser Console**: `Ctrl+Shift+J` (Linux/Windows) or `Cmd+Shift+J` (Mac) for all console logs
+- **Web Console**: `F12` for page-specific console logs and content script debugging
 
 ## 🧪 Testing
 
@@ -464,6 +584,18 @@ fastbrowse-extension/
 - [ ] Restoration controls appear and function in popup
 - [ ] Notifications display when enabled
 
+#### Firefox-Specific Testing Checklist:
+- [ ] Extension loads without errors in Firefox
+- [ ] browser.* APIs work correctly instead of chrome.* APIs
+- [ ] Background script (not service worker) functions properly
+- [ ] Focus Music preview is gracefully disabled (shows message)
+- [ ] All features work without chrome.scripting (uses tabs.executeScript fallback)
+- [ ] Manifest V2 permissions are correctly set
+- [ ] Icons display properly (16/32/48/96/128px)
+- [ ] Context menus work with browser.contextMenus
+- [ ] Keyboard shortcuts function with browser.commands
+- [ ] Extension passes AMO automated review checks
+
 ### Memory Impact Testing
 
 Use Chrome Task Manager (`Shift+Esc`) to monitor:
@@ -481,15 +613,26 @@ Use Chrome Task Manager (`Shift+Esc`) to monitor:
    - Non-sensitive form values should be re-applied
 5. Verify in background console for snapshot/restore logs; stored snapshot is removed after successful restore
 
-## 🚫 Limitations
+## 🚫 Limitations & Browser Differences
 
-- **Chrome Extension API Limitations**: Cannot suspend certain system pages or extensions
+### Universal Limitations:
+- **Extension API Limitations**: Cannot suspend certain system pages or extensions
 - **Active Tab Detection**: May occasionally suspend tabs that appear inactive but are actually in use
+- **State Snapshot Scope**: Snapshot/restore cannot run on restricted pages (chrome://, extension pages, etc.)
+- **Form State Coverage**: Only non-sensitive inputs are captured (password/hidden excluded)
+- **Browser Flags**: Extensions cannot programmatically modify browser://flags or chrome://flags
+
+### Chrome-Specific Limitations:
 - **Memory API Accuracy**: System memory reporting may vary by operating system
-- **Background Script Persistence**: Service worker may need to restart, causing brief delays
-- **State Snapshot Scope**: Snapshot/restore cannot run on restricted pages (chrome://, chrome-extension://, etc.) and won’t store state for those tabs
-- **Form State Coverage**: Only non-sensitive inputs are captured (password/hidden excluded); complex web app state outside standard form fields isn’t captured
-- **Chrome Flags**: Extensions cannot programmatically modify chrome://flags. Use the Flags Management section to get safe recommendations and copy launch flags.
+- **Service Worker Persistence**: Service worker may need to restart, causing brief delays
+- **Offscreen Document Lifecycle**: Focus Music may occasionally need reinitialization
+
+### Firefox-Specific Limitations:
+- **No System Memory API**: Memory monitoring uses estimated heuristics instead of system.memory
+- **No Offscreen Documents**: Focus Music preview disabled (Manifest V2 limitation)
+- **Background Script Persistence**: Traditional background page instead of service worker
+- **API Compatibility**: Some chrome.* APIs mapped to browser.* equivalents
+- **Extension Review**: Subject to Mozilla's AMO review process and policies
 
 ## 🔒 Privacy & Security
 
