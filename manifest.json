@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "FastBrowse",
-  "version": "1.2.0",
+  "version": "1.3.1",
   "description": "Lightweight Chrome extension to reduce memory usage through smart tab management",
   
   "permissions": [
