@@ -3,7 +3,7 @@
 
 class FastBrowse {
     constructor() {
-this.settings = {
+        this.settings = {
             autoSuspend: true,
             // Quick Session Switching
             turboMode: false,
