@@ -1115,32 +1115,36 @@ class PopupManager {
     
     updateFocusUI(isActive, stats, startTime) {
         // Update state indicator
-        this.focusStateElement.textContent = isActive ? 'ON' : 'OFF';
-        this.focusStateElement.classList.toggle('active', isActive);
+        if (this.focusStateElement) {
+            this.focusStateElement.textContent = isActive ? 'ON' : 'OFF';
+            this.focusStateElement.classList.toggle('active', isActive);
+        }
         
         // Update button
-        this.focusToggleButton.textContent = isActive ? 'Disable Focus Mode' : 'Enable Focus Mode';
-        this.focusToggleButton.classList.toggle('active', isActive);
+        if (this.focusToggleButton) {
+            this.focusToggleButton.textContent = isActive ? 'Disable Focus Mode' : 'Enable Focus Mode';
+            this.focusToggleButton.classList.toggle('active', isActive);
+        }
         
         // Show/hide stats
         if (isActive && stats) {
-            this.focusStatsElement.style.display = 'block';
+            if (this.focusStatsElement) this.focusStatsElement.style.display = 'block';
             
             // Calculate active time
-            let totalTime = stats.timeActive;
+            let totalTime = stats.timeActive || 0;
             if (startTime) {
                 totalTime += Date.now() - startTime;
             }
             const minutes = Math.round(totalTime / 60000);
             
-            this.focusTimeElement.textContent = minutes > 0 ? `${minutes}m` : '<1m';
-            this.focusTabsElement.textContent = stats.tabsSuspended || 0;
+            if (this.focusTimeElement) this.focusTimeElement.textContent = minutes > 0 ? `${minutes}m` : '<1m';
+            if (this.focusTabsElement) this.focusTabsElement.textContent = stats.tabsSuspended || 0;
             
             // Show recommendations button if focus mode is active
-            this.focusRecommendationsButton.style.display = 'inline-block';
+            if (this.focusRecommendationsButton) this.focusRecommendationsButton.style.display = 'inline-block';
         } else {
-            this.focusStatsElement.style.display = 'none';
-            this.focusRecommendationsButton.style.display = 'none';
+            if (this.focusStatsElement) this.focusStatsElement.style.display = 'none';
+            if (this.focusRecommendationsButton) this.focusRecommendationsButton.style.display = 'none';
         }
     }
     

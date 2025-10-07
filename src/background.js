@@ -2209,10 +2209,6 @@ class FastBrowse {
                 await this.playFocusMusic(this.settings.focusModeMusic);
             }
             
-            // Check for recommended extensions
-            if (this.settings.focusExtensionRecommendations) {
-                setTimeout(() => this.checkMissingFocusExtensions(), 2000);
-            }
             
         } catch (error) {
             console.error('Failed to enable focus mode:', error);
