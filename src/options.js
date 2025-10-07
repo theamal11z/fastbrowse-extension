@@ -20,14 +20,8 @@ class OptionsManager {
             protectAudio: document.getElementById('protect-audio'),
             protectForms: document.getElementById('protect-forms'),
             showNotifications: document.getElementById('show-notifications'),
-            notifyBottlenecks: document.getElementById('notify-bottlenecks'),
-            notifyMemoryLeaks: document.getElementById('notify-memory-leaks'),
             notificationCooldownSeconds: document.getElementById('notification-cooldown-seconds'),
             notificationCooldownSecondsValue: document.getElementById('notification-cooldown-seconds-value'),
-            bottleneckCooldownMinutes: document.getElementById('bottleneck-cooldown-minutes'),
-            bottleneckCooldownMinutesValue: document.getElementById('bottleneck-cooldown-minutes-value'),
-            leakCooldownMinutes: document.getElementById('leak-cooldown-minutes'),
-            leakCooldownMinutesValue: document.getElementById('leak-cooldown-minutes-value'),
             // Network optimization elements
             networkOptimizationEnabled: document.getElementById('network-optimization-enabled'),
             dnsPrefetchEnabled: document.getElementById('dns-prefetch-enabled'),
@@ -134,23 +128,7 @@ class OptionsManager {
             clearSpeed: document.getElementById('clear-speed'),
             speedStatus: document.getElementById('speed-status'),
             speedList: document.getElementById('speed-dashboard-list'),
-            // Bottlenecks
-            bottlenecksEnabled: document.getElementById('bottlenecks-enabled'),
-            slowResourceDetection: document.getElementById('slow-resource-detection'),
-            slowResourceSizeKb: document.getElementById('slow-resource-size-kb'),
-            slowResourceSizeKbValue: document.getElementById('slow-resource-size-kb-value'),
-            slowResourceDurationMs: document.getElementById('slow-resource-duration-ms'),
-            slowResourceDurationMsValue: document.getElementById('slow-resource-duration-ms-value'),
-            cpuHogWarning: document.getElementById('cpu-hog-warning'),
-            cpuLongTaskWindowMs: document.getElementById('cpu-longtask-window-ms'),
-            cpuLongTaskWindowMsValue: document.getElementById('cpu-longtask-window-ms-value'),
-            cpuLongTaskTotalMs: document.getElementById('cpu-longtask-total-ms'),
-            cpuLongTaskTotalMsValue: document.getElementById('cpu-longtask-total-ms-value'),
-            memoryLeakAlerts: document.getElementById('memory-leak-alerts'),
-            memoryLeakLookback: document.getElementById('memory-leak-lookback'),
-            memoryLeakLookbackValue: document.getElementById('memory-leak-lookback-value'),
-            memoryLeakSlope: document.getElementById('memory-leak-slope'),
-            memoryLeakSlopeValue: document.getElementById('memory-leak-slope-value'),
+            // Bottleneck Identification and Memory Leak Alerts removed
             // Quick Session Switching
             turboModeToggle: document.getElementById('turbo-mode-toggle'),
             performancePreset: document.getElementById('performance-preset'),
@@ -202,9 +180,36 @@ class OptionsManager {
             6: document.getElementById('work-day-6')  // Saturday
         };
         
+        this.sanitizeElements();
+        
         this.init();
     }
     
+    createElStub() {
+        return {
+            checked: false,
+            value: '',
+            textContent: '',
+            style: {},
+            addEventListener: () => {},
+            appendChild: () => {},
+            classList: { toggle: () => {} }
+        };
+    }
+
+    sanitizeElements() {
+        try {
+            const stub = this.createElStub();
+            Object.keys(this.elements).forEach((k) => {
+                if (!this.elements[k]) this.elements[k] = this.createElStub();
+            });
+            // Work day checkboxes: only replace missing ones with stubs
+            Object.keys(this.workDayElements).forEach((k) => {
+                if (!this.workDayElements[k]) this.workDayElements[k] = this.createElStub();
+            });
+        } catch (_) {}
+    }
+
     async init() {
         await this.loadSettings();
         await this.loadFocusStats();
@@ -218,17 +223,23 @@ class OptionsManager {
     
     setupEventListeners() {
         // Range value display updates
-        this.elements.suspendDelay.addEventListener('input', () => {
-            this.elements.suspendDelayValue.textContent = this.elements.suspendDelay.value;
-        });
+        if (this.elements.suspendDelay) {
+            this.elements.suspendDelay.addEventListener('input', () => {
+                this.elements.suspendDelayValue.textContent = this.elements.suspendDelay.value;
+            });
+        }
         
-        this.elements.memoryLimit.addEventListener('input', () => {
-            this.elements.memoryLimitValue.textContent = this.elements.memoryLimit.value;
-        });
+        if (this.elements.memoryLimit) {
+            this.elements.memoryLimit.addEventListener('input', () => {
+                this.elements.memoryLimitValue.textContent = this.elements.memoryLimit.value;
+            });
+        }
         
-        this.elements.extensionMemoryThreshold.addEventListener('input', () => {
-            this.elements.extensionMemoryThresholdValue.textContent = this.elements.extensionMemoryThreshold.value;
-        });
+        if (this.elements.extensionMemoryThreshold) {
+            this.elements.extensionMemoryThreshold.addEventListener('input', () => {
+                this.elements.extensionMemoryThresholdValue.textContent = this.elements.extensionMemoryThreshold.value;
+            });
+        }
         
         // Tag management range updates
         this.elements.tagFrequencyThreshold.addEventListener('input', () => {
@@ -276,18 +287,6 @@ class OptionsManager {
                 this.elements.notificationCooldownSecondsValue.textContent = this.elements.notificationCooldownSeconds.value;
             });
             this.elements.notificationCooldownSeconds.addEventListener('change', () => this.saveSettings());
-        }
-        if (this.elements.bottleneckCooldownMinutes) {
-            this.elements.bottleneckCooldownMinutes.addEventListener('input', () => {
-                this.elements.bottleneckCooldownMinutesValue.textContent = this.elements.bottleneckCooldownMinutes.value;
-            });
-            this.elements.bottleneckCooldownMinutes.addEventListener('change', () => this.saveSettings());
-        }
-        if (this.elements.leakCooldownMinutes) {
-            this.elements.leakCooldownMinutes.addEventListener('input', () => {
-                this.elements.leakCooldownMinutesValue.textContent = this.elements.leakCooldownMinutes.value;
-            });
-            this.elements.leakCooldownMinutes.addEventListener('change', () => this.saveSettings());
         }
 
         // Network optimization range updates
@@ -355,34 +354,7 @@ class OptionsManager {
             this.elements.memoryCompressionAlgo.addEventListener('change', () => this.saveSettings());
         }
         
-        // Bottlenecks listeners
-        if (this.elements.bottlenecksEnabled) this.elements.bottlenecksEnabled.addEventListener('change', () => this.saveSettings());
-        if (this.elements.slowResourceDetection) this.elements.slowResourceDetection.addEventListener('change', () => this.saveSettings());
-        if (this.elements.slowResourceSizeKb) {
-            this.elements.slowResourceSizeKb.addEventListener('input', () => this.elements.slowResourceSizeKbValue.textContent = this.elements.slowResourceSizeKb.value);
-            this.elements.slowResourceSizeKb.addEventListener('change', () => this.saveSettings());
-        }
-        if (this.elements.slowResourceDurationMs) {
-            this.elements.slowResourceDurationMs.addEventListener('input', () => this.elements.slowResourceDurationMsValue.textContent = this.elements.slowResourceDurationMs.value);
-            this.elements.slowResourceDurationMs.addEventListener('change', () => this.saveSettings());
-        }
-        if (this.elements.cpuHogWarning) this.elements.cpuHogWarning.addEventListener('change', () => this.saveSettings());
-        if (this.elements.cpuLongTaskWindowMs) {
-            this.elements.cpuLongTaskWindowMs.addEventListener('input', () => this.elements.cpuLongTaskWindowMsValue.textContent = this.elements.cpuLongTaskWindowMs.value);
-            this.elements.cpuLongTaskWindowMs.addEventListener('change', () => this.saveSettings());
-        }
-        if (this.elements.cpuLongTaskTotalMs) {
-            this.elements.cpuLongTaskTotalMs.addEventListener('input', () => this.elements.cpuLongTaskTotalMsValue.textContent = this.elements.cpuLongTaskTotalMs.value);
-            this.elements.cpuLongTaskTotalMs.addEventListener('change', () => this.saveSettings());
-        }
-        if (this.elements.memoryLeakAlerts) this.elements.memoryLeakAlerts.addEventListener('change', () => this.saveSettings());
-        if (this.elements.memoryLeakLookback) {
-            this.elements.memoryLeakLookback.addEventListener('input', () => this.elements.memoryLeakLookbackValue.textContent = this.elements.memoryLeakLookback.value);
-            this.elements.memoryLeakLookback.addEventListener('change', () => this.saveSettings());
-        }
-        if (this.elements.memoryLeakSlope) { this.elements.memoryLeakSlope.addEventListener('input', () => this.elements.memoryLeakSlopeValue.textContent = this.elements.memoryLeakSlope.value);
-            this.elements.memoryLeakSlope.addEventListener('change', () => this.saveSettings());
-        }
+        // Bottleneck Identification and Memory Leak Alerts listeners removed
 
         // Quick Session Switching listeners
         if (this.elements.turboModeToggle) this.elements.turboModeToggle.addEventListener('change', () => this.toggleTurbo());
@@ -441,18 +413,16 @@ class OptionsManager {
             this.saveSettings();
         });
 
-        // Notification toggles auto-save
-        if (this.elements.notifyBottlenecks) this.elements.notifyBottlenecks.addEventListener('change', () => this.saveSettings());
-        if (this.elements.notifyMemoryLeaks) this.elements.notifyMemoryLeaks.addEventListener('change', () => this.saveSettings());
+        // Notification toggles auto-save (bottleneck/leak toggles removed)
 
         // Restore defaults
         if (this.elements.resetDefaults) {
             this.elements.resetDefaults.addEventListener('click', () => this.applyDefaultsAndSave());
         }
         
-        // Auto-save on change for checkboxes
+        // Auto-save on change for checkboxes (guard nulls)
         Object.values(this.elements).forEach(element => {
-            if (element.type === 'checkbox') {
+            if (element && element.type === 'checkbox') {
                 element.addEventListener('change', () => {
                     this.saveSettings();
                 });
@@ -460,17 +430,23 @@ class OptionsManager {
         });
         
         // Auto-save on range input completion
-        this.elements.suspendDelay.addEventListener('change', () => {
-            this.saveSettings();
-        });
+        if (this.elements.suspendDelay) {
+            this.elements.suspendDelay.addEventListener('change', () => {
+                this.saveSettings();
+            });
+        }
         
-        this.elements.memoryLimit.addEventListener('change', () => {
-            this.saveSettings();
-        });
+        if (this.elements.memoryLimit) {
+            this.elements.memoryLimit.addEventListener('change', () => {
+                this.saveSettings();
+            });
+        }
         
-        this.elements.extensionMemoryThreshold.addEventListener('change', () => {
-            this.saveSettings();
-        });
+        if (this.elements.extensionMemoryThreshold) {
+            this.elements.extensionMemoryThreshold.addEventListener('change', () => {
+                this.saveSettings();
+            });
+        }
         
         // Tag management range change listeners
         this.elements.tagFrequencyThreshold.addEventListener('change', () => {
@@ -579,13 +555,11 @@ class OptionsManager {
                 const settings = response.data;
                 
                 // Update form elements with loaded settings
-                this.elements.autoSuspend.checked = settings.autoSuspend;
-                this.elements.suspendDelay.value = settings.suspendDelay;
-                this.elements.suspendDelayValue.textContent = settings.suspendDelay;
-                this.elements.memoryThreshold.checked = settings.memoryThreshold;
-                this.elements.memoryLimit.value = settings.memoryLimit;
-                this.elements.memoryLimitValue.textContent = settings.memoryLimit;
-                this.elements.memorySmartMode.checked = settings.memorySmartMode !== false;
+                if (this.elements.autoSuspend) this.elements.autoSuspend.checked = !!settings.autoSuspend;
+                if (this.elements.suspendDelay) { this.elements.suspendDelay.value = settings.suspendDelay || 30; this.elements.suspendDelayValue.textContent = String(settings.suspendDelay || 30); }
+                if (this.elements.memoryThreshold) this.elements.memoryThreshold.checked = !!settings.memoryThreshold;
+                if (this.elements.memoryLimit) { this.elements.memoryLimit.value = settings.memoryLimit; this.elements.memoryLimitValue.textContent = settings.memoryLimit; }
+                if (this.elements.memorySmartMode) this.elements.memorySmartMode.checked = settings.memorySmartMode !== false;
                 this.elements.protectPinned.checked = settings.protectPinned;
                 this.elements.protectAudio.checked = settings.protectAudio;
                 this.elements.protectForms.checked = settings.protectForms;
@@ -593,11 +567,7 @@ class OptionsManager {
                 this.elements.memoryWarnings.checked = settings.memoryWarnings;
 
                 // Notification tuning
-                if (this.elements.notifyBottlenecks) this.elements.notifyBottlenecks.checked = !!settings.bottleneckNotify;
-                if (this.elements.notifyMemoryLeaks) this.elements.notifyMemoryLeaks.checked = !!settings.leakNotify;
                 if (this.elements.notificationCooldownSeconds) { this.elements.notificationCooldownSeconds.value = settings.notificationCooldownSeconds || 120; this.elements.notificationCooldownSecondsValue.textContent = settings.notificationCooldownSeconds || 120; }
-                if (this.elements.bottleneckCooldownMinutes) { this.elements.bottleneckCooldownMinutes.value = settings.bottleneckCooldownMinutes || 10; this.elements.bottleneckCooldownMinutesValue.textContent = settings.bottleneckCooldownMinutes || 10; }
-                if (this.elements.leakCooldownMinutes) { this.elements.leakCooldownMinutes.value = settings.leakCooldownMinutes || 15; this.elements.leakCooldownMinutesValue.textContent = settings.leakCooldownMinutes || 15; }
 
                 // Network optimization settings
                 if (this.elements.networkOptimizationEnabled) this.elements.networkOptimizationEnabled.checked = settings.networkOptimizationEnabled !== false;
@@ -666,17 +636,7 @@ class OptionsManager {
                 // Speed Dashboard
                 if (this.elements.speedDashboardEnabled) this.elements.speedDashboardEnabled.checked = settings.speedDashboardEnabled !== false;
 
-                // Bottlenecks
-                if (this.elements.bottlenecksEnabled) this.elements.bottlenecksEnabled.checked = settings.bottlenecksEnabled !== false;
-                if (this.elements.slowResourceDetection) this.elements.slowResourceDetection.checked = settings.slowResourceDetection !== false;
-                if (this.elements.slowResourceSizeKb) { this.elements.slowResourceSizeKb.value = settings.slowResourceSizeKB || 200; this.elements.slowResourceSizeKbValue.textContent = settings.slowResourceSizeKB || 200; }
-                if (this.elements.slowResourceDurationMs) { this.elements.slowResourceDurationMs.value = settings.slowResourceDurationMs || 300; this.elements.slowResourceDurationMsValue.textContent = settings.slowResourceDurationMs || 300; }
-                if (this.elements.cpuHogWarning) this.elements.cpuHogWarning.checked = settings.cpuHogWarning !== false;
-                if (this.elements.cpuLongTaskWindowMs) { this.elements.cpuLongTaskWindowMs.value = settings.cpuLongTaskWindowMs || 10000; this.elements.cpuLongTaskWindowMsValue.textContent = settings.cpuLongTaskWindowMs || 10000; }
-                if (this.elements.cpuLongTaskTotalMs) { this.elements.cpuLongTaskTotalMs.value = settings.cpuLongTaskTotalMsThreshold || 1000; this.elements.cpuLongTaskTotalMsValue.textContent = settings.cpuLongTaskTotalMsThreshold || 1000; }
-                if (this.elements.memoryLeakAlerts) this.elements.memoryLeakAlerts.checked = settings.memoryLeakAlerts !== false;
-                if (this.elements.memoryLeakLookback) { this.elements.memoryLeakLookback.value = settings.memoryLeakLookbackMinutes || 5; this.elements.memoryLeakLookbackValue.textContent = settings.memoryLeakLookbackMinutes || 5; }
-                if (this.elements.memoryLeakSlope) { this.elements.memoryLeakSlope.value = settings.memoryLeakSlopeThreshold || 1.0; this.elements.memoryLeakSlopeValue.textContent = settings.memoryLeakSlopeThreshold || 1.0; }
+                // Bottleneck Identification and Memory Leak Alerts removed
 
                 // Quick Session Switching
                 if (this.elements.turboModeToggle) this.elements.turboModeToggle.checked = settings.turboMode || false;
@@ -777,14 +737,11 @@ class OptionsManager {
     async saveSettings() {
         try {
             const settings = {
-                autoSuspend: this.elements.autoSuspend.checked,
-                suspendDelay: parseInt(this.elements.suspendDelay.value),
-                memoryThreshold: this.elements.memoryThreshold.checked,
-                memoryLimit: parseInt(this.elements.memoryLimit.value),
-                memorySmartMode: this.elements.memorySmartMode.checked,
-                protectPinned: this.elements.protectPinned.checked,
-                protectAudio: this.elements.protectAudio.checked,
-                protectForms: this.elements.protectForms.checked,
+                memoryLimit: this.elements.memoryLimit ? parseInt(this.elements.memoryLimit.value) : 80,
+                memorySmartMode: this.elements.memorySmartMode ? this.elements.memorySmartMode.checked : true,
+                protectPinned: this.elements.protectPinned ? this.elements.protectPinned.checked : true,
+                protectAudio: this.elements.protectAudio ? this.elements.protectAudio.checked : true,
+                protectForms: this.elements.protectForms ? this.elements.protectForms.checked : true,
                 showNotifications: this.elements.showNotifications.checked,
                 memoryWarnings: this.elements.memoryWarnings.checked,
                 // Page Acceleration
@@ -801,17 +758,6 @@ class OptionsManager {
                 precacheIdleDelayMs: this.elements.precacheIdleDelay ? parseInt(this.elements.precacheIdleDelay.value) : 1500,
                 intelligentCacheClearEnabled: this.elements.intelligentCacheClearEnabled ? this.elements.intelligentCacheClearEnabled.checked : true,
                 cacheCompressionEnabled: this.elements.cacheCompressionEnabled ? this.elements.cacheCompressionEnabled.checked : false,
-                // Bottlenecks
-                bottlenecksEnabled: this.elements.bottlenecksEnabled ? this.elements.bottlenecksEnabled.checked : true,
-                slowResourceDetection: this.elements.slowResourceDetection ? this.elements.slowResourceDetection.checked : true,
-                slowResourceSizeKB: this.elements.slowResourceSizeKb ? parseInt(this.elements.slowResourceSizeKb.value) : 200,
-                slowResourceDurationMs: this.elements.slowResourceDurationMs ? parseInt(this.elements.slowResourceDurationMs.value) : 300,
-                cpuHogWarning: this.elements.cpuHogWarning ? this.elements.cpuHogWarning.checked : true,
-                cpuLongTaskWindowMs: this.elements.cpuLongTaskWindowMs ? parseInt(this.elements.cpuLongTaskWindowMs.value) : 10000,
-                cpuLongTaskTotalMsThreshold: this.elements.cpuLongTaskTotalMs ? parseInt(this.elements.cpuLongTaskTotalMs.value) : 1000,
-                memoryLeakAlerts: this.elements.memoryLeakAlerts ? this.elements.memoryLeakAlerts.checked : true,
-                memoryLeakLookbackMinutes: this.elements.memoryLeakLookback ? parseInt(this.elements.memoryLeakLookback.value) : 5,
-                memoryLeakSlopeThreshold: this.elements.memoryLeakSlope ? parseFloat(this.elements.memoryLeakSlope.value) : 1.0,
                 // Flags Manager
                 flagsManagerEnabled: this.elements.flagsManagerEnabled ? this.elements.flagsManagerEnabled.checked : true,
                 flagsEnableGpuRasterization: this.elements.flagGpuRasterization ? this.elements.flagGpuRasterization.checked : false,
@@ -842,11 +788,7 @@ class OptionsManager {
                 extensionSuggestions: this.elements.extensionSuggestions.checked,
                 extensionNotifications: this.elements.extensionNotifications.checked,
                 // Notifications tuning
-                bottleneckNotify: this.elements.notifyBottlenecks ? this.elements.notifyBottlenecks.checked : true,
-                leakNotify: this.elements.notifyMemoryLeaks ? this.elements.notifyMemoryLeaks.checked : true,
                 notificationCooldownSeconds: this.elements.notificationCooldownSeconds ? parseInt(this.elements.notificationCooldownSeconds.value) : 120,
-                bottleneckCooldownMinutes: this.elements.bottleneckCooldownMinutes ? parseInt(this.elements.bottleneckCooldownMinutes.value) : 10,
-                leakCooldownMinutes: this.elements.leakCooldownMinutes ? parseInt(this.elements.leakCooldownMinutes.value) : 15,
                 // Focus mode settings
                 focusMode: this.elements.focusMode.checked,
                 focusAutoSuspend: this.elements.focusAutoSuspend.checked,
@@ -963,13 +905,13 @@ class OptionsManager {
                     timeText = `${minutes} minutes`;
                 }
                 
-                this.elements.focusTotalTime.textContent = timeText;
-                this.elements.focusTotalTabs.textContent = stats.tabsSuspended || 0;
+                if (this.elements.focusTotalTime) this.elements.focusTotalTime.textContent = timeText;
+                if (this.elements.focusTotalTabs) this.elements.focusTotalTabs.textContent = stats.tabsSuspended || 0;
             }
         } catch (error) {
             console.error('Failed to load focus stats:', error);
-            this.elements.focusTotalTime.textContent = 'Unavailable';
-            this.elements.focusTotalTabs.textContent = 'Unavailable';
+            if (this.elements.focusTotalTime) this.elements.focusTotalTime.textContent = 'Unavailable';
+            if (this.elements.focusTotalTabs) this.elements.focusTotalTabs.textContent = 'Unavailable';
         }
     }
     

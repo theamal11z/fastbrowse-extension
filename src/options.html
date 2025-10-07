@@ -370,12 +370,12 @@ Never discard tabs with unsaved form data
         </div>
     </div>
 
-    <div class="section">
+        <div class="section">
         <h2>Notifications</h2>
         
         <label>
             <input type="checkbox" id="show-notifications"> 
-            Show notifications when tabs are suspended
+            Enable notifications
         </label>
         
         <label>
@@ -383,32 +383,10 @@ Never discard tabs with unsaved form data
             Show warnings when memory usage is high
         </label>
 
-        <label>
-            <input type="checkbox" id="notify-bottlenecks">
-            Show bottleneck notifications
-        </label>
-
-        <label>
-            <input type="checkbox" id="notify-memory-leaks">
-            Show memory leak notifications
-        </label>
-
         <label>Global notification cooldown (seconds):</label>
         <div class="range-container">
             <input type="range" id="notification-cooldown-seconds" min="5" max="600" step="5" value="120">
             <span class="range-value" id="notification-cooldown-seconds-value">120</span>
-        </div>
-
-        <label>Bottleneck per-site cooldown (minutes):</label>
-        <div class="range-container">
-            <input type="range" id="bottleneck-cooldown-minutes" min="1" max="60" value="10">
-            <span class="range-value" id="bottleneck-cooldown-minutes-value">10</span>
-        </div>
-
-        <label>Memory leak per-site cooldown (minutes):</label>
-        <div class="range-container">
-            <input type="range" id="leak-cooldown-minutes" min="1" max="120" value="15">
-            <span class="range-value" id="leak-cooldown-minutes-value">15</span>
         </div>
     </div>
     
@@ -639,66 +617,6 @@ Never discard tabs with unsaved form data
         <div class="description" style="margin-top:6px;">Turbo Mode temporarily disables non‑essential features for maximum speed. Presets quickly tune network/GPU/restore settings for common scenarios.</div>
     </div>
 
-    <div class="section">
-        <h2>🧩 Bottleneck Identification</h2>
-
-        <label>
-            <input type="checkbox" id="bottlenecks-enabled">
-            Enable Bottleneck Identification
-        </label>
-        <div class="description">Flags slow third‑party scripts, CPU long tasks, and potential memory leaks</div>
-
-        <div class="subsection" style="margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 6px;">
-            <h3 style="margin: 0 0 12px 0; font-size: 16px; color: #333;">Slow Resource Detection</h3>
-            <label>
-                <input type="checkbox" id="slow-resource-detection"> Detect slow third‑party scripts/trackers
-            </label>
-            <div class="range-container" style="margin-top: 8px;">
-                <label style="flex:1;">Max size (KB) to flag:</label>
-                <input type="range" id="slow-resource-size-kb" min="50" max="1000" value="200">
-                <span class="range-value" id="slow-resource-size-kb-value">200</span>
-            </div>
-            <div class="range-container" style="margin-top: 8px;">
-                <label style="flex:1;">Min duration (ms) to flag:</label>
-                <input type="range" id="slow-resource-duration-ms" min="100" max="2000" step="50" value="300">
-                <span class="range-value" id="slow-resource-duration-ms-value">300</span>
-            </div>
-        </div>
-
-        <div class="subsection" style="margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 6px;">
-            <h3 style="margin: 0 0 12px 0; font-size: 16px; color: #333;">CPU Hog Warning</h3>
-            <label>
-                <input type="checkbox" id="cpu-hog-warning"> Warn on excessive long tasks
-            </label>
-            <div class="range-container" style="margin-top: 8px;">
-                <label style="flex:1;">Window (ms):</label>
-                <input type="range" id="cpu-longtask-window-ms" min="2000" max="30000" step="1000" value="10000">
-                <span class="range-value" id="cpu-longtask-window-ms-value">10000</span>
-            </div>
-            <div class="range-container" style="margin-top: 8px;">
-                <label style="flex:1;">Total long task time threshold (ms):</label>
-                <input type="range" id="cpu-longtask-total-ms" min="200" max="5000" step="100" value="1000">
-                <span class="range-value" id="cpu-longtask-total-ms-value">1000</span>
-            </div>
-        </div>
-
-        <div class="subsection" style="margin: 20px 0; padding: 15px; background: #fff7e6; border-radius: 6px; border-left: 4px solid #ff9800;">
-            <h3 style="margin: 0 0 12px 0; font-size: 16px; color: #333;">Memory Leak Alerts</h3>
-            <label>
-                <input type="checkbox" id="memory-leak-alerts"> Alert on rising memory usage trend
-            </label>
-            <div class="range-container" style="margin-top: 8px;">
-                <label style="flex:1;">Lookback (minutes):</label>
-                <input type="range" id="memory-leak-lookback" min="2" max="15" value="5">
-                <span class="range-value" id="memory-leak-lookback-value">5</span>
-            </div>
-            <div class="range-container" style="margin-top: 8px;">
-                <label style="flex:1;">Slope threshold (% per minute):</label>
-                <input type="range" id="memory-leak-slope" min="0.5" max="5" step="0.1" value="1.0">
-                <span class="range-value" id="memory-leak-slope-value">1.0</span>
-            </div>
-        </div>
-    </div>
 
     <div class="section">
         <h2>📈 Speed Dashboard</h2>

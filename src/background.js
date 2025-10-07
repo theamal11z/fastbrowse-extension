@@ -18,17 +18,8 @@ class FastBrowse {
             precacheMaxLinks: 6,
             intelligentCacheClearEnabled: true,
             cacheCompressionEnabled: false,
-            // Bottleneck Identification
-            bottlenecksEnabled: true,
-            slowResourceDetection: true,
-            slowResourceSizeKB: 200,
-            slowResourceDurationMs: 300,
-            cpuHogWarning: true,
-            cpuLongTaskWindowMs: 10000,
-            cpuLongTaskTotalMsThreshold: 1000,
-            memoryLeakAlerts: true,
-            memoryLeakSlopeThreshold: 1.0, // % per minute
-            memoryLeakLookbackMinutes: 5,
+            // Bottleneck Identification removed
+            // Memory Leak Alerts removed
             // Speed Dashboard
             speedDashboardEnabled: true,
             speedRetainEntries: 50,
@@ -69,10 +60,6 @@ class FastBrowse {
             memoryWarnings: true,
             // Notification tuning
             notificationCooldownSeconds: 120, // global minimum cooldown between identical notifications
-            bottleneckNotify: false,
-            bottleneckCooldownMinutes: 10,
-            leakNotify: false,
-            leakCooldownMinutes: 15,
             focusNotify: true,
             // Smart memory alerts
             memorySmartMode: true,
@@ -234,6 +221,8 @@ class FastBrowse {
         this.tabTimers = new Map();
         this.activeRestorations = new Set();
         this.restorationStats = {};
+        this.restorationQueue = [];
+        this.tabRestorePriorities = new Map();
         
         this.init();
     }
@@ -349,17 +338,6 @@ class FastBrowse {
                 }
             } catch (_) {}
 
-            // Inject bottleneck detection on completed loads
-            try {
-                if (changeInfo.status === 'complete' && this.settings.bottlenecksEnabled) {
-                    if (tab && tab.url && tab.url.startsWith('http')) {
-                        chrome.scripting.executeScript({
-                            target: { tabId },
-                            files: ['src/content/bottlenecks.js']
-                        }).catch(() => {});
-                    }
-                }
-            } catch (_) {}
             // Record domain when URL becomes available
             try {
                 if (changeInfo.url || (changeInfo.status === 'complete' && tab.url)) {
@@ -758,10 +736,6 @@ class FastBrowse {
             await Promise.allSettled(promises);
             
             // Progress notification
-            if (this.settings.showNotifications && chunks.length > 1) {
-                const progress = Math.round((processed / prioritizedTabs.length) * 100);
-                this.showNotification(`Restoration progress: ${progress}% (${processed}/${prioritizedTabs.length} tabs)`, { category: 'restoration', variant: 'progress' });
-            }
             
             // Delay before next chunk (except for last chunk)
             if (chunk !== chunks[chunks.length - 1]) {
@@ -966,11 +940,7 @@ class FastBrowse {
             const globalCd = Math.max(5, Number(this.settings.notificationCooldownSeconds || 30)) * 1000;
             let cooldownTime = Number(options.cooldownMs || 0);
             if (!cooldownTime) {
-                if (category === 'bottleneck') {
-                    cooldownTime = Math.max(1, Number(this.settings.bottleneckCooldownMinutes || 10)) * 60 * 1000;
-                } else if (category === 'memory_leak') {
-                    cooldownTime = Math.max(1, Number(this.settings.leakCooldownMinutes || 15)) * 60 * 1000;
-                } else if (category === 'focus_mode') {
+                if (category === 'focus_mode') {
                     cooldownTime = Math.max(globalCd, 60 * 1000);
                 } else {
                     cooldownTime = globalCd;
@@ -1967,8 +1937,6 @@ class FastBrowse {
         }
         // Spike detection
         this.detectSpikeAndLearn(samples).catch(() => {});
-        // Memory leak alert check (best-effort)
-        this.memoryLeakAlertCheck().catch(() => {});
     }
 
     async preemptiveSuspend() {
@@ -1990,9 +1958,6 @@ class FastBrowse {
             const toSuspend = candidates.slice(0, maxCount);
             for (const t of toSuspend) {
                 await this.suspendTab(t.id);
-            }
-            if (toSuspend.length > 0 && this.settings.showNotifications) {
-                this.showNotification(`⚡ Pre‑emptive memory save: suspended ${toSuspend.length} tab(s) to avoid spike`, { category: 'preemptive' });
             }
         } catch (e) {
             console.debug('preemptiveSuspend failed:', e);
@@ -3027,15 +2992,6 @@ class FastBrowse {
                     }
                     break;
 
-                case 'reportBottlenecks':
-                    try {
-                        await this.handleBottleneckReport(request.data);
-                        sendResponse({ success: true });
-                    } catch (error) {
-                        console.error('reportBottlenecks failed:', error);
-                        sendResponse({ success: false, error: error.message });
-                    }
-                    break;
                     
                 case 'restoreFromSuspended':
                     try {
@@ -3156,98 +3112,7 @@ class FastBrowse {
         } catch (_) { return []; }
     }
 
-    async handleBottleneckReport(data) {
-        try {
-            if (!this.settings.bottlenecksEnabled) return;
-            const findings = [];
-            const slowSize = (this.settings.slowResourceSizeKB || 200) * 1024;
-            const slowDur = this.settings.slowResourceDurationMs || 300;
-            const trackers = [/googletagmanager\.com/i, /google-analytics\.com/i, /doubleclick\.net/i, /facebook\.net/i, /hotjar\.com/i, /segment\.com/i, /newrelic\.com/i, /datadoghq\.com/i];
 
-            // Slow resource detection
-            if (this.settings.slowResourceDetection && Array.isArray(data?.resources)) {
-                const heavy = data.resources.filter(r => {
-                    const isScript = (r.initiatorType || '').toLowerCase().includes('script');
-                    const isSlow = (r.duration || 0) >= slowDur || (r.encodedBodySize || 0) >= slowSize;
-                    const isThirdParty = (() => { try { return new URL(r.name).hostname !== new URL(data.url).hostname; } catch (_) { return false; }})();
-                    const isTracker = trackers.some(rx => rx.test(r.name || ''));
-                    return (isScript || isTracker) && isSlow && isThirdParty;
-                }).slice(0, 5);
-                if (heavy.length > 0) {
-                    findings.push({ type: 'slow-resources', heavy });
-                }
-            }
-
-            // CPU Hog from long tasks
-            if (this.settings.cpuHogWarning && data?.longTasks) {
-                const win = this.settings.cpuLongTaskWindowMs || 10000;
-                const thr = this.settings.cpuLongTaskTotalMsThreshold || 1000;
-                // data.longTasks.totalDurationMs is measured over a recent window in content script
-                if (data.longTasks.totalDurationMs >= thr) {
-                    findings.push({ type: 'cpu-hog', total: data.longTasks.totalDurationMs, windowMs: win });
-                }
-            }
-
-            if (findings.length > 0) {
-                // Attach summary to latest speed session for same URL/origin
-                try {
-                    const key = 'fastbrowse_speed_sessions';
-                    const obj = await chrome.storage.local.get([key]);
-                    const arr = Array.isArray(obj[key]) ? obj[key] : [];
-                    const now = Date.now();
-                    let idx = -1;
-                    for (let i = 0; i < arr.length; i++) {
-                        const e = arr[i];
-                        const sameUrl = e.url === data.url;
-                        const sameHost = (()=>{ try { return new URL(e.url).hostname === new URL(data.url).hostname; } catch(_) { return false; }})();
-                        if ((sameUrl || sameHost) && (now - e.ts) < 2*60*1000) { idx = i; break; }
-                    }
-                    if (idx >= 0) {
-                        const summary = {};
-                        const slow = findings.find(f => f.type === 'slow-resources');
-                        if (slow) summary.slowCount = slow.heavy.length;
-                        const cpu = findings.find(f => f.type === 'cpu-hog');
-                        if (cpu) summary.cpuLongTaskTotalMs = cpu.total;
-                        arr[idx].bottlenecks = summary;
-                        await chrome.storage.local.set({ [key]: arr });
-                    }
-                } catch (_) {}
-                if (this.settings.showNotifications && this.settings.bottleneckNotify !== false) {
-                    const host = (()=>{ try { return new URL(data.url).hostname; } catch(_) { return 'this page'; } })();
-                    const parts = findings.map(f => {
-                        if (f.type === 'slow-resources') return `${f.heavy.length} slow third‑party script(s)`;
-                        if (f.type === 'cpu-hog') return `Long tasks ${f.total}ms/${(f.windowMs/1000)}s`;
-                        return f.type;
-                    });
-                    this.showNotification(`⚠️ Bottlenecks on ${host}: ${parts.join(', ')}`,
-                        { category: 'bottleneck', site: host });
-                }
-            }
-        } catch (e) {
-            console.debug('handleBottleneckReport failed', e);
-        }
-    }
-
-    // Periodic memory leak alert integrated with forecasting
-    async memoryLeakAlertCheck() {
-        try {
-            if (!this.settings.memoryLeakAlerts) return;
-            const look = this.settings.memoryLeakLookbackMinutes || 5;
-            const samples = this.getRecentSamples(look);
-            if (samples.length < 2) return;
-            const slope = this.computeSlopePercentPerMinute(samples);
-            if (slope < (this.settings.memoryLeakSlopeThreshold || 1)) return; // below threshold
-            // Attribute to active tab domain
-            const activeTabs = await chrome.tabs.query({ active: true, currentWindow: true });
-            if (activeTabs && activeTabs[0] && activeTabs[0].url) {
-                const host = new URL(activeTabs[0].url).hostname;
-                if (this.settings.showNotifications && this.settings.leakNotify !== false) {
-                    this.showNotification(`🧪 Memory leak suspected: rising usage while on ${host}`,
-                        { category: 'memory_leak', site: host });
-                }
-            }
-        } catch (e) { /* ignore */ }
-    }
 
     // ============================================================================
     // CONTEXT MENUS AND KEYBOARD SHORTCUTS
@@ -3458,7 +3323,6 @@ class FastBrowse {
             this.settings.turboMode = true;
             // Reduce extension overhead, maximize speed
             this.settings.speedDashboardEnabled = false;
-            this.settings.bottlenecksEnabled = false;
             this.settings.aggressivePrefetchEnabled = false;
             this.settings.tagsEnabled = false;
             this.settings.extensionMonitoring = false;
@@ -3606,12 +3470,6 @@ class FastBrowse {
                 case 'toggle-focus-mode':
                     await this.toggleFocusMode();
                     break;
-                    
-                case 'suspend-all-tabs':
-                    await this.suspendAllTabs();
-                    this.showNotification('All eligible tabs have been suspended');
-                    break;
-                    
                     
                 case 'quick-tag-current':
                     const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
