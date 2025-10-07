@@ -21,7 +21,7 @@ class FastBrowse {
             // Bottleneck Identification removed
             // Memory Leak Alerts removed
             // Speed Dashboard
-            speedDashboardEnabled: true,
+            speedDashboardEnabled: false,
             speedRetainEntries: 50,
             // GPU Acceleration Control
             gpuAccelEnabled: true,
@@ -56,17 +56,19 @@ class FastBrowse {
             protectPinned: true,
             protectAudio: true,
             protectForms: true,
-            showNotifications: true, // Enable notifications by default for debugging
+            showNotifications: true, // Notifications enabled with throttling
             memoryWarnings: true,
             // Notification tuning
-            notificationCooldownSeconds: 120, // global minimum cooldown between identical notifications
+            notificationCooldownSeconds: 120, // per-key cooldown for identical notifications
+            maxActiveNotifications: 3,        // hard cap on simultaneous notifications
+            globalNotificationMinIntervalMs: 15000, // throttle between any two notifications
             focusNotify: true,
             // Smart memory alerts
             memorySmartMode: true,
             memoryFocusGraceMinutes: 3,
             memoryHighStreak: 3,
             // Smart memory forecasting
-            forecastingEnabled: true,
+            forecastingEnabled: false,
             forecastLookbackMinutes: 10,
             forecastHorizonMinutes: 3,
             forecastBufferPercent: 3,
@@ -78,14 +80,14 @@ class FastBrowse {
             extensionMonitoring: true,
             extensionMemoryThreshold: 50, // MB
             extensionSuggestions: true,
-            extensionNotifications: true,
+            extensionNotifications: false,
         // Focus mode settings
             focusMode: false,
             focusMinimalTheme: true,
             focusRemoveDistractions: true,
             focusDisableAnimations: true,
             focusMemoryOptimization: true,
-            focusExtensionRecommendations: true,
+            focusExtensionRecommendations: false,
             // Focus mode audio
             focusModeMusic: 'none', // 'none' or path like assets/music/FocusFlow.mp3
             // Declutter & audio
@@ -95,17 +97,17 @@ class FastBrowse {
             smartMuteEnabled: true,
             smartMuteWhitelist: ['music.youtube.com','spotify.com','soundcloud.com','meet.google.com','zoom.us'],
             // Tag management settings
-            tagsEnabled: true,
+            tagsEnabled: false,
             autoTagging: true,
             tagFrequencyThreshold: 0.3, // 0-1 scale for frequent tag classification
             tagSuggestions: true,
             maxTagsPerTab: 5,
             tagInactivityDays: 30, // Days before a tag is considered inactive
             // Tab relationships
-            relationshipsEnabled: true,
+            relationshipsEnabled: false,
             relationshipDecayMinutes: 60,
             // Context-aware distraction removal settings
-            contextAwareEnabled: true,
+            contextAwareEnabled: false,
             workHoursEnabled: true,
             workStartHour: 9, // 9 AM
             workEndHour: 17, // 5 PM
@@ -118,7 +120,11 @@ class FastBrowse {
             contextSwitchDelay: 300000, // 5 minutes delay before switching context
             workModeIntensity: 'high', // 'low', 'medium', 'high'
             personalModeIntensity: 'medium', // 'low', 'medium', 'high'
-            smartWhitelistTimeout: 1800000 // 30 minutes smart whitelist timeout
+            smartWhitelistTimeout: 1800000, // 30 minutes smart whitelist timeout
+            // Progressive restoration defaults (stabilize suspend/restore behavior)
+            progressiveRestorationEnabled: true,
+            progressiveRestorationDelay: 400,
+            maxConcurrentRestorations: 3
         };
         
         
@@ -162,6 +168,7 @@ class FastBrowse {
         this.activeNotifications = new Set();
         this.notificationCooldowns = new Map();
         this.lastNotificationTime = new Map();
+        this.lastGlobalNotificationAt = 0;
         
         
         // Recommended focus extensions database
@@ -1014,6 +1021,19 @@ class FastBrowse {
     showNotification(message, options = {}) {
         try {
             const now = Date.now();
+            // Global throttle: prevent bursts across different categories/messages
+            const minInterval = Number(this.settings.globalNotificationMinIntervalMs || 0);
+            if (minInterval > 0 && (now - (this.lastGlobalNotificationAt || 0)) < minInterval) {
+                console.debug('Notification suppressed due to global throttle');
+                return;
+            }
+
+            // Cap concurrent active notifications
+            const maxActive = Number(this.settings.maxActiveNotifications || 0);
+            if (maxActive > 0 && this.activeNotifications.size >= maxActive) {
+                console.debug('Notification suppressed due to max active notifications cap');
+                return;
+            }
             // Compose a stable key using category/site/variant if provided to avoid bypass by dynamic text
             const category = options.category || 'general';
             const site = options.site || '';
@@ -1066,6 +1086,7 @@ class FastBrowse {
                 } else {
                     console.log('Notification created:', notificationId);
                     this.activeNotifications.add(notificationId);
+                    this.lastGlobalNotificationAt = Date.now();
 
                     // Auto-clear notification after 5 seconds if not requiring interaction
                     if (!notificationOptions.requireInteraction) {
