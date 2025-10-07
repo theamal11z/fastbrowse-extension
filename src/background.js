@@ -671,12 +671,97 @@ class FastBrowse {
     }
     
     
-    // Stub methods for removed suspend functionality
-    clearTabTimer(tabId) { /* no-op */ }
-    async restoreTab(tabId, options = {}) { /* no-op */ }
-    async suspendTab(tabId) { /* no-op */ }
-    async shouldProtectTab(tab) { return false; }
-    
+    // Suspend/Restore implementation
+    clearTabTimer(tabId) {
+        try {
+            const timer = this.tabTimers.get(tabId);
+            if (timer) {
+                clearTimeout(timer);
+                this.tabTimers.delete(tabId);
+            }
+        } catch (_) {}
+    }
+
+    async shouldProtectTab(tab) {
+        try {
+            if (!tab) return true;
+            if (this.settings.protectPinned && tab.pinned) return true;
+            if (this.settings.protectAudio && tab.audible) return true;
+            // Don't attempt to suspend special pages
+            const url = tab.url || '';
+            if (url.startsWith('chrome://') || url.startsWith('chrome-extension://') || url.startsWith('edge://') || url.startsWith('about:')) {
+                return true;
+            }
+            return false;
+        } catch (_) {
+            return true;
+        }
+    }
+
+    async suspendTab(tabId) {
+        try {
+            const tab = await chrome.tabs.get(tabId);
+            if (await this.shouldProtectTab(tab)) {
+                return false;
+            }
+            // Attempt to discard. Some tabs may not be discardable; handle gracefully.
+            try {
+                await chrome.tabs.discard(tabId);
+            } catch (e) {
+                console.debug('discard failed, proceeding best-effort:', e?.message || e);
+            }
+            // Track in our suspended map (even if Chrome already marks discarded)
+            this.suspendedTabs.set(tabId, { url: tab.url || '', ts: Date.now() });
+            await this.updateActionBadge();
+            return true;
+        } catch (error) {
+            console.error('suspendTab failed:', error);
+            return false;
+        }
+    }
+
+    async restoreTab(tabId, options = {}) {
+        try {
+            // If tab exists, reload to restore from discarded state
+            const tab = await chrome.tabs.get(tabId);
+            try {
+                await chrome.tabs.reload(tabId, {});
+            } catch (e) {
+                console.debug('reload failed (maybe already active):', e?.message || e);
+            }
+            // Optionally activate/focus
+            if (options.activate) {
+                try {
+                    await chrome.tabs.update(tabId, { active: true });
+                    await chrome.windows.update(tab.windowId, { focused: true });
+                } catch (_) {}
+            }
+            this.suspendedTabs.delete(tabId);
+            await this.updateActionBadge();
+            return true;
+        } catch (error) {
+            console.error('restoreTab failed:', error);
+            return false;
+        }
+    }
+
+    async suspendAllTabs() {
+        try {
+            const tabs = await chrome.tabs.query({});
+            for (const tab of tabs) {
+                if (tab.active) continue; // keep current active tab responsive
+                try {
+                    if (!(await this.shouldProtectTab(tab))) {
+                        await this.suspendTab(tab.id);
+                    }
+                } catch (_) {}
+            }
+            await this.updateActionBadge();
+        } catch (e) {
+            console.error('suspendAllTabs failed:', e);
+        }
+    }
+
     async restoreAllTabs(options = {}) {
         try {
             const suspendedTabIds = Array.from(this.suspendedTabs.keys());

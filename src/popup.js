@@ -623,7 +623,35 @@ class PopupManager {
         const tabActions = document.createElement('div');
         tabActions.className = 'tab-actions';
         
-        // Tab actions removed - no suspend/restore functionality
+        // Tab actions: Suspend/Restore
+        const isSpecial = (tab.url || '').startsWith('chrome://') || (tab.url || '').startsWith('chrome-extension://');
+        const isSuspended = !!tab.discarded || !!tab.suspended;
+        const actionBtn = document.createElement('button');
+        actionBtn.textContent = isSuspended ? 'Restore' : 'Suspend';
+        actionBtn.className = isSuspended ? 'secondary' : '';
+        actionBtn.disabled = isSpecial;
+        actionBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            try {
+                if (isSuspended) {
+                    await this.sendMessage({ action: 'restoreTab', tabId: tab.id });
+                    this.showToast('Tab restored', 'success');
+                } else {
+                    await this.sendMessage({ action: 'suspendTab', tabId: tab.id });
+                    this.showToast('Tab suspended', 'success');
+                }
+                await this.loadTabList();
+            } catch (err) {
+                console.error('Tab action failed:', err);
+                this.showToast('Action failed', 'error');
+            }
+        });
+        tabActions.appendChild(actionBtn);
+        
+        // Apply suspended visual state
+        if (isSuspended) {
+            tabItem.classList.add('suspended');
+        }
         
         // Click to switch to tab
         // Add tag display
