@@ -168,7 +168,6 @@
                 <h2>Quick start</h2>
                 <p>Recommended defaults for most users:</p>
                 <ul>
-                    <li>Auto-suspend inactive tabs after 30 minutes</li>
                     <li>Protect pinned tabs and tabs playing audio</li>
                     <li>Enable smart memory alerts</li>
                 </ul>
@@ -178,48 +177,7 @@
             <div class="section">
         <h2>Memory Management</h2>
         
-        <label>
-            <input type="checkbox" id="auto-suspend"> 
-            Automatically suspend inactive tabs
-        </label>
-        <div class="description">Tabs will be suspended after a period of inactivity to save memory</div>
         
-        <label>Suspend tabs after (minutes):</label>
-        <div class="range-container">
-            <input type="range" id="suspend-delay" min="5" max="120" value="30">
-            <span class="range-value" id="suspend-delay-value">30</span>
-        </div>
-        
-        <label>
-            <input type="checkbox" id="memory-threshold"> 
-            Suspend tabs when memory usage is high
-        </label>
-        <div class="description">Automatically suspend tabs when system memory usage exceeds the threshold</div>
-        
-        <div class="subsection" data-advanced="true" style="margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 6px;">
-            <h3 style="margin: 0 0 15px 0; font-size: 16px; color: #333;">🗜️ Memory Compression for Suspended Tabs</h3>
-            <label>
-                <input type="checkbox" id="memory-compression-enabled">
-                Enable memory compression and state restoration
-            </label>
-            <div class="description">Save minimal tab state (URL, title, scroll, non-sensitive form values) to restore on resume</div>
-            
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 10px;">
-                <label style="display: flex; align-items: center; gap: 8px;">
-                    <input type="checkbox" id="snapshot-scroll"> Capture scroll position
-                </label>
-                <label style="display: flex; align-items: center; gap: 8px;">
-                    <input type="checkbox" id="snapshot-forms"> Capture non-sensitive form values
-                </label>
-            </div>
-            
-            <label style="margin-top: 10px;">Compression algorithm:</label>
-            <select id="memory-compression-algo" style="padding: 6px; border: 1px solid #ddd; border-radius: 4px; width: 180px;">
-                <option value="gzip">gzip (recommended)</option>
-                <option value="deflate">deflate</option>
-                <option value="none">none</option>
-            </select>
-        </div>
         
         <label>
             <input type="checkbox" id="memory-smart-mode"> 
@@ -239,17 +197,17 @@
         
         <label>
             <input type="checkbox" id="protect-pinned"> 
-            Never suspend pinned tabs
+Never discard pinned tabs
         </label>
         
         <label>
             <input type="checkbox" id="protect-audio"> 
-            Never suspend tabs playing audio
+Never discard tabs playing audio
         </label>
         
         <label>
             <input type="checkbox" id="protect-forms"> 
-            Never suspend tabs with unsaved form data
+Never discard tabs with unsaved form data
         </label>
     </div>
     
@@ -492,11 +450,6 @@
         </label>
         <div class="description">Focus Mode removes distractions, applies minimal theming, and optimizes for productivity</div>
         
-        <label>
-            <input type="checkbox" id="focus-auto-suspend"> 
-            Auto-suspend tabs when entering Focus Mode
-        </label>
-        <div class="description">Automatically suspend all background tabs when Focus Mode is activated</div>
         
         <label>
             <input type="checkbox" id="focus-minimal-theme"> 
@@ -535,10 +488,6 @@
                     <strong>Total Focus Time:</strong>
                     <div style="color: #667eea; font-weight: bold; font-size: 18px;" id="focus-total-time">0 minutes</div>
                 </div>
-                <div>
-                    <strong>Tabs Suspended:</strong>
-                    <div style="color: #667eea; font-weight: bold; font-size: 18px;" id="focus-total-tabs">0</div>
-                </div>
             </div>
         </div>
     </div>
@@ -565,17 +514,12 @@
         </div>
         <div class="description">Tags above this frequency are considered "frequent" and get special treatment</div>
         
-        <label>
-            <input type="checkbox" id="tag-based-suspension"> 
-            Use tags for suspension decisions
-        </label>
-        <div class="description">Consider tag priority and frequency when deciding which tabs to suspend</div>
         
         <label>
             <input type="checkbox" id="tag-suggestions"> 
             Enable smart tag suggestions
         </label>
-        <div class="description">Show suggestions for grouping tabs and creating new tags based on usage patterns</div>
+        <div class="description">Show suggestions for creating new tags based on usage patterns</div>
         
         <label>Maximum tags per tab:</label>
         <div class="range-container">
@@ -594,24 +538,6 @@
         <div class="subsection" style="margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 6px;">
             <h3 style="margin: 0 0 15px 0; font-size: 16px; color: #333;">🧠 Tag-Based Memory Policies</h3>
 
-            <label>
-                <input type="checkbox" id="tag-policy-enabled">
-                Enable tag-based suspension policies
-            </label>
-            <div class="description">Apply different suspension rules for specific tag categories</div>
-
-            <label>Work tabs: suspension delay multiplier</label>
-            <div class="range-container">
-                <input type="range" id="work-tag-delay-multiplier" min="1" max="5" value="3">
-                <span class="range-value" id="work-tag-delay-multiplier-value">3</span>
-            </div>
-            <div class="description">Example: 3 = Work-tagged tabs suspend 3× slower</div>
-
-            <label>
-                <input type="checkbox" id="reference-no-suspend-during-work">
-                Reference tabs: never suspend during work hours
-            </label>
-            <div class="description">If a tab has a "Reference" tag, it remains active during work hours</div>
         </div>
         
         <div class="tag-stats" style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 6px; border-left: 4px solid #2196f3;">
@@ -633,33 +559,6 @@
         </div>
     </div>
     
-    <div class="section">
-        <h2>🧠 Memory-Aware Restoration</h2>
-        
-        <label>
-            <input type="checkbox" id="memory-aware-restoration"> 
-            Enable memory-aware tab restoration
-        </label>
-        <div class="description">Smart tab restoration that prioritizes content over heavy media and considers memory usage</div>
-        
-        <label>Lite mode memory threshold (%):</label>
-        <div class="range-container">
-            <input type="range" id="lite-restoration-threshold" min="50" max="90" value="75">
-            <span class="range-value" id="lite-restoration-threshold-value">75</span>
-        </div>
-        <div class="description">When memory usage exceeds this threshold, tabs will be restored in lite mode</div>
-        
-        <label>
-            <input type="checkbox" id="progressive-restoration-enabled"> 
-            Enable progressive restoration
-        </label>
-        <div class="description">Restore tabs gradually with delays between batches to prevent memory spikes</div>
-        
-        <label>Progressive restoration delay (ms):</label>
-        <div class="range-container">
-            <input type="range" id="progressive-restoration-delay" min="500" max="5000" step="250" value="1000">
-            <span class="range-value" id="progressive-restoration-delay-value">1000</span>
-        </div>
         <div class="description">Delay between restoring batches of tabs during progressive restoration</div>
         
         <label>

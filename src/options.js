@@ -593,8 +593,8 @@ class OptionsManager {
                 this.elements.memoryWarnings.checked = settings.memoryWarnings;
 
                 // Notification tuning
-                if (this.elements.notifyBottlenecks) this.elements.notifyBottlenecks.checked = settings.bottleneckNotify !== false;
-                if (this.elements.notifyMemoryLeaks) this.elements.notifyMemoryLeaks.checked = settings.leakNotify !== false;
+                if (this.elements.notifyBottlenecks) this.elements.notifyBottlenecks.checked = !!settings.bottleneckNotify;
+                if (this.elements.notifyMemoryLeaks) this.elements.notifyMemoryLeaks.checked = !!settings.leakNotify;
                 if (this.elements.notificationCooldownSeconds) { this.elements.notificationCooldownSeconds.value = settings.notificationCooldownSeconds || 120; this.elements.notificationCooldownSecondsValue.textContent = settings.notificationCooldownSeconds || 120; }
                 if (this.elements.bottleneckCooldownMinutes) { this.elements.bottleneckCooldownMinutes.value = settings.bottleneckCooldownMinutes || 10; this.elements.bottleneckCooldownMinutesValue.textContent = settings.bottleneckCooldownMinutes || 10; }
                 if (this.elements.leakCooldownMinutes) { this.elements.leakCooldownMinutes.value = settings.leakCooldownMinutes || 15; this.elements.leakCooldownMinutesValue.textContent = settings.leakCooldownMinutes || 15; }

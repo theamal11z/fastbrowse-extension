@@ -4,7 +4,6 @@
 class FastBrowse {
     constructor() {
         this.settings = {
-            autoSuspend: true,
             // Quick Session Switching
             turboMode: false,
             performancePreset: 'browsing', // 'gaming' | 'streaming' | 'browsing'
@@ -59,16 +58,8 @@ class FastBrowse {
             prefetchOnHoverEnabled: true,
             maxPrefetchHosts: 5,
             preconnectTopN: 2,
-            // Memory compression for suspended tabs
-            memoryCompressionEnabled: true,
-            memoryCompressionAlgo: 'gzip', // 'gzip' | 'deflate' | 'none'
-            snapshotScroll: true,
-            snapshotForms: true,
             // Tag-Based Memory Policies
             tagPolicyEnabled: true,
-            workTagDelayMultiplier: 3, // Work-tagged tabs get 3x longer delay
-            referenceNoSuspendDuringWork: true,
-            suspendDelay: 1, // minutes - start with 1 minute for testing
             memoryThreshold: true,
             memoryLimit: 80, // percentage
             protectPinned: true,
@@ -78,15 +69,13 @@ class FastBrowse {
             memoryWarnings: true,
             // Notification tuning
             notificationCooldownSeconds: 120, // global minimum cooldown between identical notifications
-            bottleneckNotify: true,
+            bottleneckNotify: false,
             bottleneckCooldownMinutes: 10,
-            leakNotify: true,
+            leakNotify: false,
             leakCooldownMinutes: 15,
             focusNotify: true,
-            suspendNotify: true,
             // Smart memory alerts
             memorySmartMode: true,
-            memoryMinUnsuspendedTabs: 5,
             memoryFocusGraceMinutes: 3,
             memoryHighStreak: 3,
             // Smart memory forecasting
@@ -98,7 +87,6 @@ class FastBrowse {
             leakSpikeDeltaPercent: 8,
             leakSpikeWindowMinutes: 3,
             leakDomainThreshold: 3,
-            leakFastSuspendMinutes: 5,
             // Extension monitoring settings
             extensionMonitoring: true,
             extensionMemoryThreshold: 50, // MB
@@ -106,7 +94,6 @@ class FastBrowse {
             extensionNotifications: true,
         // Focus mode settings
             focusMode: false,
-            focusAutoSuspend: true, // Auto-suspend tabs in focus mode
             focusMinimalTheme: true,
             focusRemoveDistractions: true,
             focusDisableAnimations: true,
@@ -124,24 +111,12 @@ class FastBrowse {
             tagsEnabled: true,
             autoTagging: true,
             tagFrequencyThreshold: 0.3, // 0-1 scale for frequent tag classification
-            tagBasedSuspension: true,
             tagSuggestions: true,
             maxTagsPerTab: 5,
             tagInactivityDays: 30, // Days before a tag is considered inactive
             // Tab relationships
             relationshipsEnabled: true,
             relationshipDecayMinutes: 60,
-            // Memory-aware restoration settings
-            memoryAwareRestoration: true,
-            liteRestorationThreshold: 75, // Memory usage % to trigger lite mode
-            progressiveRestorationEnabled: true,
-            progressiveRestorationDelay: 1000, // ms between restoring tabs
-            prioritizeContentOverMedia: true,
-            liteRestorationDefault: false,
-            // Restoration priority settings
-            restorationPriorityMode: 'smart', // 'smart', 'manual', 'all'
-            maxConcurrentRestorations: 3,
-            restorationMemoryBuffer: 5, // % memory buffer to maintain
             // Context-aware distraction removal settings
             contextAwareEnabled: true,
             workHoursEnabled: true,
@@ -159,8 +134,6 @@ class FastBrowse {
             smartWhitelistTimeout: 1800000 // 30 minutes smart whitelist timeout
         };
         
-        this.suspendedTabs = new Map();
-        this.tabTimers = new Map();
         
         // Extension monitoring data
         this.extensionMemoryData = new Map();
@@ -185,7 +158,6 @@ class FastBrowse {
         this.focusModeActive = false;
         this.focusModeStartTime = null;
         this.focusModeStats = {
-            tabsSuspended: 0,
             distractionsRemoved: 0,
             timeActive: 0
         };
@@ -204,16 +176,6 @@ class FastBrowse {
         this.notificationCooldowns = new Map();
         this.lastNotificationTime = new Map();
         
-        // Memory-aware restoration state
-        this.restorationQueue = [];
-        this.activeRestorations = new Set();
-        this.restorationStats = {
-            totalRestored: 0,
-            liteRestorations: 0,
-            memoryOptimized: 0,
-            lastRestorationTime: null
-        };
-        this.tabRestorePriorities = new Map(); // tabId -> priority score
         
         // Recommended focus extensions database
         this.recommendedFocusExtensions = new Map([
@@ -266,6 +228,12 @@ class FastBrowse {
         this.smartWhitelist = new Map(); // domain -> expiry timestamp
         this.contextSwitchTimeout = null; // Timeout for context switching
         this.lastContextCheck = 0; // Last time context was checked
+        
+        // Stubs for removed suspend functionality to prevent errors
+        this.suspendedTabs = new Map();
+        this.tabTimers = new Map();
+        this.activeRestorations = new Set();
+        this.restorationStats = {};
         
         this.init();
     }
@@ -483,13 +451,6 @@ class FastBrowse {
         this.lastChromeFocusAt = Date.now();
         const tab = await chrome.tabs.get(activeInfo.tabId);
         
-        // Clear suspend timer for active tab
-        this.clearTabTimer(activeInfo.tabId);
-        
-        // Restore tab if it's suspended
-        if (this.suspendedTabs.has(activeInfo.tabId)) {
-            await this.restoreTab(activeInfo.tabId);
-        }
         
         // Update tag usage for activated tab
         if (this.settings.tagsEnabled) {
@@ -505,10 +466,6 @@ class FastBrowse {
             }
         }
         
-        // Start timers for other tabs in the window
-        if (this.settings.autoSuspend) {
-            await this.updateTabTimers(activeInfo.windowId, activeInfo.tabId);
-        }
     }
     
     async onTabUpdated(tabId, changeInfo, tab) {
@@ -518,15 +475,6 @@ class FastBrowse {
         }
         // Badge update
         this.updateActionBadge().catch(() => {});
-        // Handle tab loading states
-        if (changeInfo.status === 'loading') {
-            this.clearTabTimer(tabId);
-        } else if (changeInfo.status === 'complete' && this.settings.autoSuspend) {
-            // Start suspend timer if tab is not active
-            if (!tab.active) {
-                await this.startTabTimer(tabId);
-            }
-        }
     }
     
     onTabRemoved(tabId) {
@@ -540,8 +488,6 @@ class FastBrowse {
             }
         } catch (_) {}
         this.updateActionBadge().catch(() => {});
-        this.clearTabTimer(tabId);
-        this.suspendedTabs.delete(tabId);
         
         // Clean up tag associations
         if (this.settings.tagsEnabled && this.tabTags.has(tabId)) {
@@ -560,431 +506,11 @@ class FastBrowse {
         if (windowId !== chrome.windows.WINDOW_ID_NONE) {
             this.lastChromeFocusAt = Date.now();
         }
-        if (windowId !== chrome.windows.WINDOW_ID_NONE && this.settings.autoSuspend) {
-            // Update timers for all tabs in the focused window
-            await this.updateTabTimers(windowId);
-        }
     }
     
-    async updateTabTimers(windowId, activeTabId = null) {
-        try {
-            const tabs = await chrome.tabs.query({ windowId: windowId });
-            
-            for (const tab of tabs) {
-                if (tab.id === activeTabId || tab.active) {
-                    this.clearTabTimer(tab.id);
-                } else if (!this.suspendedTabs.has(tab.id)) {
-                    await this.startTabTimer(tab.id);
-                }
-            }
-        } catch (error) {
-            console.error('Failed to update tab timers:', error);
-        }
-    }
     
-    async startTabTimer(tabId) {
-        this.clearTabTimer(tabId);
-        
-        // First check if the tab still exists before setting a timer
-        try {
-            const tab = await chrome.tabs.get(tabId);
-
-            // Compute effective delay based on tag policies
-            const delayMs = await this.computeEffectiveSuspendDelay(tab);
-            if (delayMs === null) {
-                console.log(`Skipping suspend timer for tab ${tabId} due to tag policy`);
-                return;
-            }
-            
-            const timer = setTimeout(() => {
-                this.suspendTab(tabId);
-            }, delayMs);
-            
-            this.tabTimers.set(tabId, timer);
-            const minutes = Math.round(delayMs / 60000);
-            console.log(`Timer set for tab ${tabId} - will suspend in ${minutes} minutes`);
-        } catch (error) {
-            // Tab doesn't exist anymore, no need to set a timer
-            if (error.message && error.message.includes('No tab with id')) {
-                console.log(`Not setting timer for tab ${tabId} - tab no longer exists`);
-                return;
-            }
-            // For other errors, log but still try to set the timer
-            console.error(`Error checking tab existence for ${tabId}:`, error);
-            
-            const delayMs = this.settings.suspendDelay * 60 * 1000;
-            const timer = setTimeout(() => {
-                this.suspendTab(tabId);
-            }, delayMs);
-            
-            this.tabTimers.set(tabId, timer);
-        }
-    }
     
-    clearTabTimer(tabId) {
-        if (this.tabTimers.has(tabId)) {
-            clearTimeout(this.tabTimers.get(tabId));
-            this.tabTimers.delete(tabId);
-        }
-    }
     
-    async suspendTab(tabId) {
-        // Clean up timer for this tab since we're about to process it
-        this.clearTabTimer(tabId);
-        
-        try {
-            // First check if tab exists before attempting operations
-            const tab = await chrome.tabs.get(tabId);
-            console.log(`Attempting to suspend tab ${tabId}: ${tab.title || 'Unknown'}`);
-            
-            // Check if tab should be protected
-            if (await this.shouldProtectTab(tab)) {
-                console.log(`Tab ${tabId} is protected from suspension`);
-                return;
-            }
-            
-            // Check if tab is already discarded
-            if (tab.discarded) {
-                console.log(`Tab ${tabId} is already discarded`);
-                this.suspendedTabs.set(tabId, {
-                    url: tab.url || 'about:blank',
-                    title: tab.title || 'Unknown',
-                    favIconUrl: tab.favIconUrl || null,
-                    suspendedAt: Date.now()
-                });
-                return;
-            }
-            
-// Optionally capture and store minimal tab state before discarding
-            if (this.settings.memoryCompressionEnabled) {
-                try {
-                    await this.captureAndStoreTabState(tab);
-                } catch (snapErr) {
-                    console.debug(`Snapshot failed for tab ${tabId}:`, snapErr);
-                }
-            }
-
-            // Store tab information before discarding (with defensive checks)
-            this.suspendedTabs.set(tabId, {
-                url: tab.url || 'about:blank',
-                title: tab.title || 'Unknown',
-                favIconUrl: tab.favIconUrl || null,
-                suspendedAt: Date.now()
-            });
-            
-            // Discard the tab
-            console.log(`Discarding tab ${tabId}...`);
-            
-            try {
-                await chrome.tabs.discard(tabId);
-                
-                // Verify the tab was discarded (check if tab still exists first)
-                try {
-                    const updatedTab = await chrome.tabs.get(tabId);
-                    if (updatedTab.discarded) {
-                        console.log(`✓ Tab ${tabId} successfully suspended: ${tab.title || 'Unknown'}`);
-                        if (this.settings.showNotifications && this.settings.suspendNotify !== false) {
-                            this.showNotification(`Tab suspended: ${tab.title || 'Unknown'}`, { category: 'tab_suspended', variant: 'discard' });
-                        }
-                    } else {
-                        console.warn(`⚠ Tab ${tabId} was not discarded by Chrome API, trying alternative method`);
-                        // Alternative: Replace tab URL with a suspended page
-                        await this.suspendTabAlternative(tabId, tab);
-                    }
-                } catch (getTabError) {
-                    // Tab was discarded or removed during the process
-                    if (getTabError.message && getTabError.message.includes('No tab with id')) {
-                        console.log(`✓ Tab ${tabId} was discarded (tab no longer accessible): ${tab.title || 'Unknown'}`);
-                    } else {
-                        throw getTabError;
-                    }
-                }
-            } catch (discardError) {
-                // Check if the discard error is due to tab not existing
-                if (discardError.message && discardError.message.includes('No tab with id')) {
-                    console.log(`Tab ${tabId} was closed before suspension could complete: ${tab.title || 'Unknown'}`);
-                    // Clean up our records
-                    this.suspendedTabs.delete(tabId);
-                    return;
-                }
-                
-                console.error(`Discard API failed for tab ${tabId}:`, discardError);
-                // Fallback to alternative suspension method only if tab still exists
-                try {
-                    await chrome.tabs.get(tabId); // Check if tab still exists
-                    await this.suspendTabAlternative(tabId, tab);
-                } catch (tabCheckError) {
-                    if (tabCheckError.message && tabCheckError.message.includes('No tab with id')) {
-                        console.log(`Tab ${tabId} was closed during suspension attempt: ${tab.title || 'Unknown'}`);
-                        this.suspendedTabs.delete(tabId);
-                        return;
-                    }
-                    throw tabCheckError;
-                }
-            }
-            
-        } catch (error) {
-            // Clean up records for this tab
-            this.suspendedTabs.delete(tabId);
-            
-            // If tab doesn't exist anymore, that's normal - user closed it
-            if (error.message && error.message.includes('No tab with id')) {
-                console.log(`Tab ${tabId} no longer exists (closed by user)`);
-                return;
-            }
-            
-            // For other errors, log them but don't throw
-            console.error(`Failed to suspend tab ${tabId}:`, error);
-        }
-    }
-    
-    async suspendTabAlternative(tabId, originalTab) {
-        try {
-            // First check if tab still exists
-            await chrome.tabs.get(tabId);
-
-            const safeTitle = (originalTab.title || 'Unknown Tab').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;');
-            const safeUrl = originalTab.url || 'about:blank';
-            const suspendedUrl = chrome.runtime.getURL('src/suspended.html') +
-                `?tabId=${encodeURIComponent(String(tabId))}` +
-                `&url=${encodeURIComponent(safeUrl)}` +
-                `&title=${encodeURIComponent(safeTitle)}`;
-
-            // Navigate tab to suspended page
-            await chrome.tabs.update(tabId, { url: suspendedUrl });
-
-            console.log(`✓ Tab ${tabId} suspended using alternative method (suspended.html)`);
-            if (this.settings.showNotifications && this.settings.suspendNotify !== false) {
-                this.showNotification(`Tab suspended (alt): ${originalTab.title || 'Unknown'}`, { category: 'tab_suspended', variant: 'alt' });
-            }
-        } catch (error) {
-            // Handle case where tab was closed during the process
-            if (error.message && error.message.includes('No tab with id')) {
-                console.log(`Tab ${tabId} was closed during alternative suspension: ${originalTab.title || 'Unknown'}`);
-                this.suspendedTabs.delete(tabId);
-                return;
-            }
-            console.error(`Alternative suspend method failed for tab ${tabId}:`, error);
-        }
-    }
-    
-    async restoreTab(tabId, options = {}) {
-        try {
-            const tab = await chrome.tabs.get(tabId);
-            const restoreMode = await this.determineRestoreMode(tab, options);
-            
-            console.log(`Restoring tab ${tabId} in ${restoreMode} mode: ${tab.title || 'Unknown'}`);
-            
-            // Track active restoration
-            this.activeRestorations.add(tabId);
-            
-            if (restoreMode === 'lite') {
-                await this.restoreTabLite(tab, options);
-                this.restorationStats.liteRestorations++;
-            } else {
-                await this.restoreTabFull(tab, options);
-            }
-            
-            this.suspendedTabs.delete(tabId);
-            this.activeRestorations.delete(tabId);
-            this.restorationStats.totalRestored++;
-            this.restorationStats.lastRestorationTime = Date.now();
-            
-            console.log(`✓ Tab ${tabId} restored successfully`);
-            
-        } catch (error) {
-            // Clean up our records even if tab doesn't exist
-            this.suspendedTabs.delete(tabId);
-            this.activeRestorations.delete(tabId);
-            
-            if (error.message && error.message.includes('No tab with id')) {
-                console.log(`Cannot restore tab ${tabId} - tab no longer exists`);
-                return;
-            }
-            console.error(`Failed to restore tab ${tabId}:`, error);
-        }
-    }
-    
-    async determineRestoreMode(tab, options = {}) {
-        // Check for user override
-        if (options.forceMode) {
-            return options.forceMode;
-        }
-        
-        // If memory-aware restoration is disabled, always use full mode
-        if (!this.settings.memoryAwareRestoration) {
-            return 'full';
-        }
-        
-        // Check if lite mode is default setting
-        if (this.settings.liteRestorationDefault) {
-            return 'lite';
-        }
-        
-        try {
-            // Check current memory usage
-            const memoryInfo = await chrome.system.memory.getInfo();
-            const usagePercent = ((memoryInfo.capacity - memoryInfo.availableCapacity) / memoryInfo.capacity) * 100;
-            
-            // Use lite mode if memory usage is high
-            if (usagePercent > this.settings.liteRestorationThreshold) {
-                console.log(`Using lite mode due to high memory usage: ${usagePercent.toFixed(1)}%`);
-                return 'lite';
-            }
-            
-            // Check if tab contains heavy media (based on URL patterns)
-            if (this.settings.prioritizeContentOverMedia && this.isMediaHeavyTab(tab)) {
-                console.log(`Using lite mode for media-heavy tab: ${tab.url}`);
-                return 'lite';
-            }
-            
-            // Check concurrent restorations
-            if (this.activeRestorations.size >= this.settings.maxConcurrentRestorations) {
-                console.log(`Using lite mode due to concurrent restoration limit`);
-                return 'lite';
-            }
-            
-            return 'full';
-            
-        } catch (error) {
-            console.warn('Failed to determine restore mode, using full:', error);
-            return 'full';
-        }
-    }
-    
-    isMediaHeavyTab(tab) {
-        if (!tab.url) return false;
-        
-        const mediaHeavySites = [
-            'youtube.com', 'vimeo.com', 'dailymotion.com', 'twitch.tv',
-            'netflix.com', 'hulu.com', 'disney.com', 'amazon.com/prime',
-            'instagram.com', 'tiktok.com', 'twitter.com', 'x.com',
-            'reddit.com/r/videos', 'imgur.com', 'giphy.com'
-        ];
-        
-        return mediaHeavySites.some(site => tab.url.includes(site));
-    }
-    
-    async restoreTabFull(tab, options = {}) {
-        try {
-            if (tab.discarded) {
-                await chrome.tabs.reload(tab.id);
-                await this.waitForTabLoad(tab.id, 3000);
-            } else {
-                // If we used alternative suspension (our suspended.html or data URL), navigate back to original
-                const isSuspendedPage = (tab.url || '').startsWith(chrome.runtime.getURL('src/suspended.html')) || (tab.url || '').startsWith('data:text/html');
-                if (isSuspendedPage) {
-                    const rec = this.suspendedTabs.get(tab.id);
-                    if (rec && rec.url) {
-                        await chrome.tabs.update(tab.id, { url: rec.url });
-                        await this.waitForTabLoad(tab.id, 3000);
-                    }
-                }
-            }
-        } catch (_) {
-            // Ignore navigation errors
-        }
-
-        // Attempt to restore snapshot state if available
-        if (this.settings.memoryCompressionEnabled) {
-            try {
-                await this.tryRestoreStoredTabState(tab.id);
-            } catch (e) {
-                console.debug('State restore (full) failed:', e);
-            }
-        }
-    }
-    
-    async restoreTabLite(tab, options = {}) {
-        if (tab.discarded) {
-            // First, reload the tab
-            await chrome.tabs.reload(tab.id);
-            
-            // Wait for basic page load
-            await this.waitForTabLoad(tab.id, 2000);
-            
-            // Inject lite mode content script to block heavy media
-            try {
-                await chrome.scripting.executeScript({
-                    target: { tabId: tab.id },
-                    files: ['src/content/lite-mode.js']
-                });
-                
-                // Enable lite mode
-                await chrome.tabs.sendMessage(tab.id, {
-                    action: 'enableLiteMode',
-                    options: {
-                        blockVideos: true,
-                        blockAutoplay: true,
-                        blockAnimations: this.settings.focusDisableAnimations,
-                        blockSocialEmbeds: true,
-                        showPlaceholders: true,
-                        optimizeImages: true
-                    }
-                });
-                
-                console.log(`✓ Lite mode enabled for tab ${tab.id}`);
-this.restorationStats.memoryOptimized++;
-                // After enabling lite mode, try restoring minimal state too
-                if (this.settings.memoryCompressionEnabled) {
-                    try { await this.tryRestoreStoredTabState(tab.id); } catch (e) { console.debug('State restore (lite) failed:', e); }
-                }
-                
-            } catch (error) {
-                console.warn(`Failed to enable lite mode for tab ${tab.id}:`, error);
-                // Continue with regular restoration if lite mode fails
-            }
-        }
-    }
-    
-    async waitForTabLoad(tabId, timeout = 5000) {
-        return new Promise((resolve) => {
-            const startTime = Date.now();
-            
-            const checkTab = async () => {
-                try {
-                    const tab = await chrome.tabs.get(tabId);
-                    
-                    if (tab.status === 'complete' || Date.now() - startTime > timeout) {
-                        resolve();
-                    } else {
-                        setTimeout(checkTab, 500);
-                    }
-                } catch (error) {
-                    resolve(); // Tab might be closed, just resolve
-                }
-            };
-            
-            checkTab();
-        });
-    }
-
-    // Compute per-tab suspend delay based on tag policies and work hours
-    async computeEffectiveSuspendDelay(tab) {
-        try {
-            let delayMs = this.settings.suspendDelay * 60 * 1000;
-            if (!this.settings.tagsEnabled || !this.settings.tagPolicyEnabled) return delayMs;
-
-            const tags = this.getTabTags(tab.id) || [];
-            const hasTag = (name) => tags.some(t => (t.name || '').toLowerCase().includes(name));
-
-            // Reference: never suspend during work hours
-            if (this.settings.referenceNoSuspendDuringWork && this.isWorkHoursActive() && hasTag('reference')) {
-                return null; // signal to skip timer entirely
-            }
-
-            // Work: longer delay
-            if (hasTag('work')) {
-                const mult = Math.max(1, Number(this.settings.workTagDelayMultiplier || 1));
-                delayMs = Math.round(delayMs * mult);
-            }
-
-            return delayMs;
-        } catch (e) {
-            // On error, fall back to default delay
-            return this.settings.suspendDelay * 60 * 1000;
-        }
-    }
 
     // Work hours helper based on settings
     isWorkHoursActive() {
@@ -1167,79 +693,11 @@ this.restorationStats.memoryOptimized++;
     }
     
     
-    async shouldProtectTab(tab) {
-        // Protect pinned tabs
-        if (this.settings.protectPinned && tab.pinned) {
-            return true;
-        }
-        
-        // Protect tabs playing audio
-        if (this.settings.protectAudio && tab.audible) {
-            return true;
-        }
-        
-        // Don't suspend active tabs
-        if (tab.active) {
-            return true;
-        }
-        
-        // Check for special URLs
-        if (tab.url && (
-            tab.url.startsWith('chrome://') || 
-            tab.url.startsWith('chrome-extension://') || 
-            tab.url.startsWith('edge://') || 
-            tab.url.startsWith('about:'))) {
-            return true;
-        }
-        
-        // Tag-based protection
-        if (this.settings.tagsEnabled && this.settings.tagBasedSuspension) {
-            const tabTags = this.getTabTags(tab.id);
-            
-            for (const tag of tabTags) {
-                // Protect high priority tags
-                if (tag.priority === 'high') {
-                    return true;
-                }
-                
-                // Protect frequently used tags
-                if (tag.frequency >= this.settings.tagFrequencyThreshold) {
-                    return true;
-                }
-                
-                // Protect tags marked as no auto-suspend
-                if (!tag.autoSuspend) {
-                    return true;
-                }
-            }
-        }
-        
-        // Tag-Based Memory Policies: protect Reference tabs during work hours
-        try {
-            if (this.settings.tagsEnabled && this.settings.tagPolicyEnabled && this.settings.referenceNoSuspendDuringWork && this.isWorkHoursActive()) {
-                const tabTags = this.getTabTags(tab.id) || [];
-                if (tabTags.some(t => (t.name || '').toLowerCase().includes('reference'))) {
-                    return true;
-                }
-            }
-        } catch (_) {}
-        
-        return false;
-    }
-    
-    async suspendAllTabs() {
-        try {
-            const tabs = await chrome.tabs.query({});
-            
-            for (const tab of tabs) {
-                if (!tab.active && !(await this.shouldProtectTab(tab))) {
-                    await this.suspendTab(tab.id);
-                }
-            }
-        } catch (error) {
-            console.error('Failed to suspend all tabs:', error);
-        }
-    }
+    // Stub methods for removed suspend functionality
+    clearTabTimer(tabId) { /* no-op */ }
+    async restoreTab(tabId, options = {}) { /* no-op */ }
+    async suspendTab(tabId) { /* no-op */ }
+    async shouldProtectTab(tab) { return false; }
     
     async restoreAllTabs(options = {}) {
         try {
@@ -2191,215 +1649,7 @@ this.restorationStats.memoryOptimized++;
         return groupId;
     }
     
-    // Auto-group tabs based on various criteria
-    async autoGroupTabs() {
-        if (!this.settings.tagsEnabled) return;
-        
-        console.log('Starting auto-grouping process...');
-        
-        const tabs = await chrome.tabs.query({});
-        const groupSuggestions = [];
-        
-        // Group by domain similarity
-        const domainGroups = await this.groupTabsByDomain(tabs);
-        groupSuggestions.push(...domainGroups);
-        
-        // Group by tag co-occurrence
-        const tagCoGroups = await this.groupTabsByTagCooccurrence(tabs);
-        groupSuggestions.push(...tagCoGroups);
-        
-        // Group by usage patterns
-        const usageGroups = await this.groupTabsByUsagePattern(tabs);
-        groupSuggestions.push(...usageGroups);
-        
-        // Group by time-based patterns
-        const timeGroups = await this.groupTabsByTimePattern(tabs);
-        groupSuggestions.push(...timeGroups);
-        
-        console.log(`Generated ${groupSuggestions.length} auto-grouping suggestions`);
-        return groupSuggestions;
-    }
     
-    // Group tabs by domain similarity
-    async groupTabsByDomain(tabs) {
-        const domainGroups = new Map();
-        const suggestions = [];
-        
-        for (const tab of tabs) {
-            try {
-                const url = new URL(tab.url);
-                const domain = url.hostname.replace('www.', '');
-                
-                if (!domainGroups.has(domain)) {
-                    domainGroups.set(domain, []);
-                }
-                domainGroups.get(domain).push(tab);
-            } catch (error) {
-                // Skip invalid URLs
-                continue;
-            }
-        }
-        
-        // Create suggestions for domains with multiple tabs
-        for (const [domain, domainTabs] of domainGroups.entries()) {
-            if (domainTabs.length >= 2) {
-                const domainName = domain.split('.')[0];
-                const groupName = domainName.charAt(0).toUpperCase() + domainName.slice(1);
-                
-                suggestions.push({
-                    type: 'domain',
-                    name: groupName,
-                    tabs: domainTabs,
-                    confidence: Math.min(domainTabs.length / 5, 1), // Higher confidence with more tabs
-                    reason: `${domainTabs.length} tabs from ${domain}`
-                });
-            }
-        }
-        
-        return suggestions.sort((a, b) => b.confidence - a.confidence);
-    }
-    
-    // Group tabs by tag co-occurrence patterns
-    async groupTabsByTagCooccurrence(tabs) {
-        const tagCombinations = new Map();
-        const suggestions = [];
-        
-        // Analyze which tags frequently appear together
-        for (const tab of tabs) {
-            const tabTags = this.getTabTags(tab.id);
-            if (tabTags.length < 2) continue;
-            
-            // Generate all combinations of tags for this tab
-            for (let i = 0; i < tabTags.length; i++) {
-                for (let j = i + 1; j < tabTags.length; j++) {
-                    const combo = [tabTags[i].id, tabTags[j].id].sort().join(',');
-                    
-                    if (!tagCombinations.has(combo)) {
-                        tagCombinations.set(combo, {
-                            tags: [tabTags[i], tabTags[j]],
-                            tabs: [],
-                            count: 0
-                        });
-                    }
-                    
-                    tagCombinations.get(combo).tabs.push(tab);
-                    tagCombinations.get(combo).count++;
-                }
-            }
-        }
-        
-        // Create suggestions for frequent tag combinations
-        for (const [combo, data] of tagCombinations.entries()) {
-            if (data.count >= 3) { // At least 3 co-occurrences
-                const groupName = data.tags.map(tag => tag.name).join(' + ');
-                
-                suggestions.push({
-                    type: 'tag-cooccurrence',
-                    name: groupName,
-                    tags: data.tags,
-                    tabs: data.tabs,
-                    confidence: Math.min(data.count / 10, 1),
-                    reason: `${data.count} tabs with both tags`
-                });
-            }
-        }
-        
-        return suggestions.sort((a, b) => b.confidence - a.confidence);
-    }
-    
-    // Group tabs by usage patterns (frequent vs occasional)
-    async groupTabsByUsagePattern(tabs) {
-        const suggestions = [];
-        const frequentTabs = [];
-        const occasionalTabs = [];
-        
-        for (const tab of tabs) {
-            const tabTags = this.getTabTags(tab.id);
-            const avgFrequency = tabTags.length > 0 
-                ? tabTags.reduce((sum, tag) => sum + tag.frequency, 0) / tabTags.length
-                : 0;
-            
-            if (avgFrequency >= this.settings.tagFrequencyThreshold) {
-                frequentTabs.push(tab);
-            } else if (avgFrequency > 0) {
-                occasionalTabs.push(tab);
-            }
-        }
-        
-        if (frequentTabs.length >= 3) {
-            suggestions.push({
-                type: 'usage-frequent',
-                name: 'Frequent Use',
-                tabs: frequentTabs,
-                confidence: Math.min(frequentTabs.length / 10, 1),
-                reason: `${frequentTabs.length} frequently used tabs`,
-                priority: 'high'
-            });
-        }
-        
-        if (occasionalTabs.length >= 5) {
-            suggestions.push({
-                type: 'usage-occasional',
-                name: 'Occasional Use',
-                tabs: occasionalTabs,
-                confidence: Math.min(occasionalTabs.length / 15, 1),
-                reason: `${occasionalTabs.length} occasionally used tabs`,
-                priority: 'low'
-            });
-        }
-        
-        return suggestions.sort((a, b) => b.confidence - a.confidence);
-    }
-    
-    // Group tabs by time-based patterns (work hours, etc.)
-    async groupTabsByTimePattern(tabs) {
-        const suggestions = [];
-        const now = new Date();
-        const currentHour = now.getHours();
-        
-        // Define time periods
-        const timePatterns = {
-            'Morning Work': { start: 8, end: 12, tags: ['Work', 'Development', 'Productivity'] },
-            'Afternoon Work': { start: 13, end: 17, tags: ['Work', 'Development', 'Productivity'] },
-            'Evening Personal': { start: 18, end: 22, tags: ['Personal', 'Entertainment', 'Social Media'] },
-            'Late Night': { start: 22, end: 6, tags: ['Entertainment', 'Personal', 'Research'] }
-        };
-        
-        for (const [patternName, pattern] of Object.entries(timePatterns)) {
-            const matchingTabs = [];
-            
-            for (const tab of tabs) {
-                const tabTags = this.getTabTags(tab.id);
-                const hasMatchingTag = tabTags.some(tag => 
-                    pattern.tags.some(patternTag => 
-                        tag.name.toLowerCase().includes(patternTag.toLowerCase())
-                    )
-                );
-                
-                // Check if current time matches pattern
-                const isTimeMatch = (pattern.start <= pattern.end) 
-                    ? (currentHour >= pattern.start && currentHour <= pattern.end)
-                    : (currentHour >= pattern.start || currentHour <= pattern.end);
-                
-                if (hasMatchingTag && isTimeMatch) {
-                    matchingTabs.push(tab);
-                }
-            }
-            
-            if (matchingTabs.length >= 2) {
-                suggestions.push({
-                    type: 'time-pattern',
-                    name: patternName,
-                    tabs: matchingTabs,
-                    confidence: Math.min(matchingTabs.length / 5, 1),
-                    reason: `${matchingTabs.length} tabs matching ${patternName.toLowerCase()} pattern`,
-                    timePattern: pattern
-                });
-            }
-        }
-        
-        return suggestions.sort((a, b) => b.confidence - a.confidence);
-    }
     
     // Extension Monitoring Methods
     async getExtensionMemoryUsage() {
@@ -3554,15 +2804,6 @@ this.restorationStats.memoryOptimized++;
                     }
                     break;
                     
-                case 'autoGroupTabs':
-                    try {
-                        const suggestions = await this.autoGroupTabs();
-                        sendResponse({ success: true, data: suggestions });
-                    } catch (error) {
-                        console.error('Failed to auto-group tabs:', error);
-                        sendResponse({ success: false, error: error.message });
-                    }
-                    break;
                     
                 case 'getTabRelationships':
                     try {
@@ -4048,13 +3289,6 @@ this.restorationStats.memoryOptimized++;
                 contexts: ['page', 'action']
             });
             
-            // Auto-grouping
-            chrome.contextMenus.create({
-                id: 'auto-group-tabs',
-                parentId: 'fastbrowse-tags',
-                title: 'Auto-Group All Tabs',
-                contexts: ['page', 'action']
-            });
             
             chrome.contextMenus.create({
                 id: 'separator2',
@@ -4346,10 +3580,6 @@ this.restorationStats.memoryOptimized++;
                     await this.showTagSuggestionsForTab(tab);
                     break;
                     
-                case 'auto-group-tabs':
-                    await this.autoGroupTabs();
-                    this.showNotification('Auto-grouping completed! Check the popup for suggestions.');
-                    break;
                     
                 default:
                     // Check if it's an assign-tag action
@@ -4382,10 +3612,6 @@ this.restorationStats.memoryOptimized++;
                     this.showNotification('All eligible tabs have been suspended');
                     break;
                     
-                case 'auto-group-tabs':
-                    await this.autoGroupTabs();
-                    this.showNotification('Auto-grouping completed! Check the popup for suggestions.');
-                    break;
                     
                 case 'quick-tag-current':
                     const tabs = await chrome.tabs.query({ active: true, currentWindow: true });

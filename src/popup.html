@@ -161,10 +161,6 @@
             font-size: 12px;
         }
         
-        .tab-item.suspended {
-            opacity: 0.6;
-            background: #fafafa;
-        }
         
         .tab-icon {
             width: 16px;
@@ -579,57 +575,6 @@
             border: 1px solid #e0e0e0;
         }
         
-        .group-suggestions {
-            margin-top: 8px;
-        }
-        
-        .group-suggestion {
-            background: #fff3e0;
-            border: 1px solid #ffcc02;
-            border-radius: 4px;
-            padding: 8px;
-            margin-bottom: 4px;
-            font-size: 11px;
-        }
-        
-        .group-suggestion-header {
-            font-weight: bold;
-            color: #e65100;
-            margin-bottom: 2px;
-        }
-        
-        .group-suggestion-reason {
-            color: #bf360c;
-            font-size: 10px;
-            margin-bottom: 4px;
-        }
-        
-        .group-suggestion-actions {
-            display: flex;
-            gap: 4px;
-        }
-        
-        .create-group-btn {
-            background: #ff9800 !important;
-            color: white !important;
-            padding: 2px 6px !important;
-            font-size: 9px !important;
-        }
-        
-        .create-group-btn:hover {
-            background: #f57c00 !important;
-        }
-        
-        .dismiss-suggestion-btn {
-            background: #f5f5f5 !important;
-            color: #666 !important;
-            padding: 2px 6px !important;
-            font-size: 9px !important;
-        }
-        
-        .dismiss-suggestion-btn:hover {
-            background: #e0e0e0 !important;
-        }
         
         /* Settings styles */
         .settings-section {
@@ -817,7 +762,6 @@
             </div>
             <div class="focus-stats" id="focus-stats" style="display: none;">
                 <span class="stat-item">⏰ <span id="focus-time">0m</span></span>
-                <span class="stat-item">📑 <span id="focus-tabs">0</span> suspended</span>
             </div>
         </div>
         <div class="focus-controls">
@@ -862,35 +806,9 @@
     </div>
     
     <div class="controls">
-        <button id="suspend-all">Suspend All Tabs</button>
-        <button id="auto-group-tabs-main">Auto-Group Tabs</button>
         <button id="declutter" class="secondary">Declutter</button>
-        <div class="restore-controls" id="restore-controls">
-            <button id="restore-all" class="secondary">Restore All</button>
-            <button id="restore-all-lite" class="secondary" title="Restore tabs in lite mode to save memory">Restore (Lite)</button>
-            <button id="toggle-restoration-mode" class="icon-btn secondary" title="Toggle restoration mode">
-                <span id="restoration-mode-icon">🧠</span>
-            </button>
-        </div>
     </div>
     
-    <!-- Memory-Aware Restoration Status -->
-    <div class="restoration-status" id="restoration-status" style="display: none;">
-        <div class="restoration-info">
-            <span class="restoration-mode">Mode: <span id="current-restoration-mode">Smart</span></span>
-            <span class="restoration-stats">
-                <span id="restoration-progress">0/0</span> restored
-                (<span id="lite-restorations">0</span> lite)
-            </span>
-        </div>
-        <div class="restoration-memory-bar">
-            <div class="memory-bar-background">
-                <div class="memory-bar-fill" id="restoration-memory-fill" style="width: 0%"></div>
-                <div class="memory-threshold-line" id="restoration-threshold-line" style="left: 75%"></div>
-            </div>
-            <span class="memory-percentage" id="restoration-memory-percent">0%</span>
-        </div>
-    </div>
     
     <input id="tab-search" type="search" placeholder="Search tabs by title or URL..." aria-label="Search tabs">
     <div class="tab-list" id="tab-list">
@@ -911,7 +829,6 @@
                 </select>
             </div>
             <div class="tag-action-controls">
-                <button id="auto-group-tabs" class="secondary">Auto-Group</button>
                 <button id="open-settings" class="secondary">Settings ⚙️</button>
                 <button id="close-tags" class="secondary">Close</button>
             </div>
@@ -924,10 +841,6 @@
             <div class="active-tags">
                 <h4>Active Tags</h4>
                 <div class="tag-pills" id="active-tag-pills"></div>
-            </div>
-            <div class="group-suggestions">
-                <h4>Group Suggestions</h4>
-                <div id="group-suggestions"></div>
             </div>
             <div class="relationships">
                 <h4>Tab Relationships</h4>
@@ -966,20 +879,6 @@
         <h3>Settings</h3>
         <div class="settings-grid">
             <div class="setting-item">
-                <label>Auto-suspend inactive tabs</label>
-                <label class="switch">
-                    <input type="checkbox" id="set-auto-suspend">
-                    <span class="slider"></span>
-                </label>
-            </div>
-            <div class="setting-item">
-                <label>Suspend after (minutes)</label>
-                <div class="range-container">
-                    <input type="range" id="set-suspend-delay" min="5" max="120" value="30">
-                    <span class="range-value" id="set-suspend-delay-value">30</span>
-                </div>
-            </div>
-            <div class="setting-item">
                 <label>Smart memory alerts</label>
                 <label class="switch">
                     <input type="checkbox" id="set-memory-smart-mode">
@@ -1015,7 +914,6 @@
                     <input type="checkbox" id="set-forecasting-enabled">
                     <span class="slider"></span>
                 </label>
-                <div class="description">Predict spikes and pre-emptively suspend to avoid hits</div>
             </div>
             <div class="setting-item">
                 <label>Forecast horizon (minutes)</label>
@@ -1049,7 +947,7 @@
             <div class="setting-item">
                 <label>Declutter domain whitelist (comma separated)</label>
                 <input type="text" id="set-declutter-whitelist" placeholder="e.g., example.com, mysite.org" style="width:100%; padding:6px; border:1px solid #ddd; border-radius:4px;" />
-                <div class="description">Tabs from these domains won’t be closed/suspended by Declutter</div>
+                <div class="description">Tabs from these domains won't be closed by Declutter</div>
             </div>
             <div class="setting-item">
                 <label>Focus Mode music</label>

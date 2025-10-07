@@ -5,19 +5,6 @@ class PopupManager {
     constructor() {
         this.memoryUsageElement = document.getElementById('memory-usage');
         this.tabListElement = document.getElementById('tab-list');
-        this.suspendAllButton = document.getElementById('suspend-all');
-        this.restoreAllButton = document.getElementById('restore-all');
-        this.restoreAllLiteButton = document.getElementById('restore-all-lite');
-        this.toggleRestorationModeButton = document.getElementById('toggle-restoration-mode');
-        this.restorationStatusElement = document.getElementById('restoration-status');
-        this.currentRestorationModeElement = document.getElementById('current-restoration-mode');
-        this.restorationProgressElement = document.getElementById('restoration-progress');
-        this.liteRestorationsElement = document.getElementById('lite-restorations');
-        this.restorationMemoryFillElement = document.getElementById('restoration-memory-fill');
-        this.restorationMemoryPercentElement = document.getElementById('restoration-memory-percent');
-        this.restorationThresholdLineElement = document.getElementById('restoration-threshold-line');
-        this.restorationModeIconElement = document.getElementById('restoration-mode-icon');
-        this.autoGroupTabsMainButton = document.getElementById('auto-group-tabs-main');
         this.declutterButton = document.getElementById('declutter');
         
         // Extension monitoring elements
@@ -38,14 +25,12 @@ class PopupManager {
         this.showFrequentTagsButton = document.getElementById('show-frequent-tags');
         this.showActiveTagsButton = document.getElementById('show-active-tags');
         this.tagFilterSelect = document.getElementById('tag-filter-select');
-        this.autoGroupTabsButton = document.getElementById('auto-group-tabs');
         this.toggleTagsButton = document.getElementById('toggle-tags');
         this.closeTagsButton = document.getElementById('close-tags');
         this.tagsSectionElement = document.getElementById('tags-section');
         this.tagsDisplayElement = document.getElementById('tags-display');
         this.frequentTagPillsElement = document.getElementById('frequent-tag-pills');
         this.activeTagPillsElement = document.getElementById('active-tag-pills');
-        this.groupSuggestionsElement = document.getElementById('group-suggestions');
         this.relationshipGroupsElement = document.getElementById('relationship-groups');
         this.refreshRelationshipsButton = document.getElementById('refresh-relationships');
         
@@ -56,9 +41,6 @@ class PopupManager {
         this.saveSettingsButton = document.getElementById('save-settings');
         this.openFullOptionsButton = document.getElementById('open-full-options');
         this.closeSettingsButton = document.getElementById('close-settings');
-        this.setAutoSuspend = document.getElementById('set-auto-suspend');
-        this.setSuspendDelay = document.getElementById('set-suspend-delay');
-        this.setSuspendDelayValue = document.getElementById('set-suspend-delay-value');
         this.setMemorySmartMode = document.getElementById('set-memory-smart-mode');
         this.setMemoryLimit = document.getElementById('set-memory-limit');
         this.setMemoryLimitValue = document.getElementById('set-memory-limit-value');
@@ -107,10 +89,6 @@ class PopupManager {
         this.currentTabs = [];
         this.allTags = [];
         
-        // Restoration state
-        this.currentRestorationMode = 'smart'; // 'smart', 'lite', 'full'
-        this.restorationStats = null;
-        this.restorationUpdateInterval = null;
         
         this.init();
 
@@ -128,12 +106,10 @@ class PopupManager {
             await this.loadTabList();
             await this.loadFocusState();
             await this.loadTagData();
-            await this.loadRestorationState();
             await this.loadContextInfo();
             this.setupEventListeners();
             this.setupNavigation();
             this.setupTabSearch();
-            this.startRestorationMonitoring();
         } catch (error) {
             console.error('Failed to initialize popup:', error);
             // Still setup event listeners even if other initialization fails
@@ -142,31 +118,7 @@ class PopupManager {
     }
     
     setupEventListeners() {
-        this.suspendAllButton.addEventListener('click', () => {
-            this.suspendAllTabs();
-        });
         
-        this.restoreAllButton.addEventListener('click', () => {
-            this.restoreAllTabs();
-        });
-        
-        if (this.restoreAllLiteButton) {
-            this.restoreAllLiteButton.addEventListener('click', () => {
-                this.restoreAllTabsLite();
-            });
-        }
-        
-        if (this.toggleRestorationModeButton) {
-            this.toggleRestorationModeButton.addEventListener('click', () => {
-                this.cycleRestorationMode();
-            });
-        }
-        
-        if (this.autoGroupTabsMainButton) {
-            this.autoGroupTabsMainButton.addEventListener('click', () => {
-                this.autoGroupTabs(this.autoGroupTabsMainButton);
-            });
-        }
         if (this.declutterButton) {
             this.declutterButton.title = 'Declutter tabs (Shift+Click for quick preview)';
             this.declutterButton.addEventListener('click', (e) => {
@@ -238,9 +190,6 @@ class PopupManager {
             }
         });
         
-        this.autoGroupTabsButton.addEventListener('click', () => {
-            this.autoGroupTabs(this.autoGroupTabsButton);
-        });
         
         this.toggleTagsButton.addEventListener('click', () => {
             this.toggleTagsSection();
@@ -612,122 +561,12 @@ class PopupManager {
         });
     }
     
-    async autoGroupTabs(triggerButton = null) {
-        const btn = triggerButton || this.autoGroupTabsButton;
-        const originalLabel = btn ? btn.textContent : '';
-        try {
-            if (btn) {
-                btn.disabled = true;
-                btn.textContent = 'Analyzing...';
-            }
-            
-            const response = await this.sendMessage({ action: 'autoGroupTabs' });
-            if (response.success) {
-                this.renderGroupSuggestions(response.data);
-                
-                // Show tags section if hidden
-                if (this.tagsSectionElement.style.display === 'none') {
-                    this.toggleTagsSection();
-                }
-                
-                if (!response.data || response.data.length === 0) {
-                    this.showToast('No grouping suggestions found', 'info');
-                } else {
-                    this.showToast('Grouping suggestions updated', 'success');
-                }
-            } else {
-                throw new Error(response.error || 'Failed to generate suggestions');
-            }
-        } catch (error) {
-            console.error('Failed to auto-group tabs:', error);
-            this.showToast(`Failed to auto-group tabs: ${error.message}`, 'error');
-        } finally {
-            if (btn) {
-                btn.disabled = false;
-                btn.textContent = originalLabel || 'Auto-Group';
-            }
-        }
-    }
     
-    renderGroupSuggestions(suggestions) {
-        this.groupSuggestionsElement.innerHTML = '';
-        
-        if (suggestions.length === 0) {
-            const noSuggestions = document.createElement('div');
-            noSuggestions.textContent = 'No grouping suggestions found';
-            noSuggestions.style.color = '#999';
-            noSuggestions.style.fontSize = '11px';
-            this.groupSuggestionsElement.appendChild(noSuggestions);
-            return;
-        }
-        
-        // Show top 3 suggestions
-        suggestions.slice(0, 3).forEach(suggestion => {
-            const suggestionDiv = document.createElement('div');
-            suggestionDiv.className = 'group-suggestion';
-            
-            const header = document.createElement('div');
-            header.className = 'group-suggestion-header';
-            header.textContent = suggestion.name;
-            suggestionDiv.appendChild(header);
-            
-            const reason = document.createElement('div');
-            reason.className = 'group-suggestion-reason';
-            reason.textContent = suggestion.reason;
-            suggestionDiv.appendChild(reason);
-            
-            const actions = document.createElement('div');
-            actions.className = 'group-suggestion-actions';
-            
-            const createBtn = document.createElement('button');
-            createBtn.className = 'create-group-btn';
-            createBtn.textContent = 'Create Group';
-            createBtn.addEventListener('click', () => {
-                this.createGroupFromSuggestion(suggestion);
-            });
-            actions.appendChild(createBtn);
-            
-            const dismissBtn = document.createElement('button');
-            dismissBtn.className = 'dismiss-suggestion-btn';
-            dismissBtn.textContent = 'Dismiss';
-            dismissBtn.addEventListener('click', () => {
-                suggestionDiv.remove();
-            });
-            actions.appendChild(dismissBtn);
-            
-            suggestionDiv.appendChild(actions);
-            this.groupSuggestionsElement.appendChild(suggestionDiv);
-        });
-    }
     
-    async createGroupFromSuggestion(suggestion) {
-        try {
-            const response = await this.sendMessage({
-                action: 'createTagGroup',
-                name: suggestion.name,
-                tagIds: suggestion.tags ? suggestion.tags.map(tag => tag.id) : [],
-                options: {
-                    suspendRule: suggestion.priority === 'low' ? 'inactive' : 'never',
-                    priority: suggestion.priority || 'medium'
-                }
-            });
-            
-            if (response.success) {
-                this.showToast(`Group "${suggestion.name}" created successfully`, 'success');
-                // Refresh the display
-                await this.updateTagsDisplay();
-            } else {
-                throw new Error(response.error || 'Failed to create group');
-            }
-        } catch (error) {
-            console.error('Failed to create group:', error);
-            this.showToast(`Failed to create group: ${error.message}`, 'error');
-        }
-    }
     
     createTabItem(tab) {
         const tabItem = document.createElement('div');
-        let itemClasses = `tab-item ${tab.suspended || tab.discarded ? 'suspended' : ''}`;
+        let itemClasses = 'tab-item';
         
         // Add tag-based styling
         if (tab.tags && tab.tags.length > 0) {
@@ -784,24 +623,7 @@ class PopupManager {
         const tabActions = document.createElement('div');
         tabActions.className = 'tab-actions';
         
-        if (tab.suspended || tab.discarded) {
-            const restoreButton = document.createElement('button');
-            restoreButton.textContent = 'Restore';
-            restoreButton.addEventListener('click', (e) => {
-                e.stopPropagation();
-                this.restoreTab(tab.id);
-            });
-            tabActions.appendChild(restoreButton);
-        } else if (!tab.active) {
-            const suspendButton = document.createElement('button');
-            suspendButton.textContent = 'Suspend';
-            suspendButton.className = 'secondary';
-            suspendButton.addEventListener('click', (e) => {
-                e.stopPropagation();
-                this.suspendTab(tab.id);
-            });
-            tabActions.appendChild(suspendButton);
-        }
+        // Tab actions removed - no suspend/restore functionality
         
         // Click to switch to tab
         // Add tag display
@@ -837,103 +659,9 @@ class PopupManager {
         tabItem.appendChild(tabTitle);
         tabItem.appendChild(tabActions);
         
-        // Enhance for memory-aware restoration
-        return this.enhanceTabItemForRestoration(tabItem, tab);
+        return tabItem;
     }
     
-    async suspendTab(tabId) {
-        try {
-            await this.sendMessage({ action: 'suspendTab', tabId: tabId });
-            setTimeout(() => this.loadTabList(), 500); // Refresh after a delay
-        } catch (error) {
-            console.error('Failed to suspend tab:', error);
-        }
-    }
-    
-    async restoreTab(tabId, mode = null) {
-        try {
-            const action = mode === 'lite' ? 'restoreTabLite' : 
-                          mode === 'full' ? 'restoreTabFull' : 'restoreTab';
-            await this.sendMessage({ action, tabId, options: { forceMode: mode } });
-            setTimeout(() => {
-                this.loadTabList();
-                this.updateRestorationStatus();
-            }, 500); // Refresh after a delay
-        } catch (error) {
-            console.error('Failed to restore tab:', error);
-        }
-    }
-    
-    async suspendAllTabs() {
-        try {
-            this.suspendAllButton.disabled = true;
-            this.suspendAllButton.textContent = 'Suspending...';
-            
-            await this.sendMessage({ action: 'suspendAllTabs' });
-            
-            setTimeout(() => {
-                this.loadTabList();
-                this.suspendAllButton.disabled = false;
-                this.suspendAllButton.textContent = 'Suspend All Tabs';
-            }, 1000);
-        } catch (error) {
-            console.error('Failed to suspend all tabs:', error);
-            this.suspendAllButton.disabled = false;
-            this.suspendAllButton.textContent = 'Suspend All Tabs';
-        }
-    }
-    
-    async restoreAllTabs() {
-        try {
-            this.restoreAllButton.disabled = true;
-            this.restoreAllButton.textContent = 'Restoring...';
-            
-            // Use current restoration mode settings
-            const options = this.currentRestorationMode === 'lite' ? { forceMode: 'lite' } :
-                           this.currentRestorationMode === 'full' ? { forceMode: 'full' } : {};
-            
-            await this.sendMessage({ action: 'restoreAllTabs', options });
-            
-            // Show restoration status during operation
-            this.showRestorationStatus();
-            
-            setTimeout(() => {
-                this.loadTabList();
-                this.updateRestorationStatus();
-                this.restoreAllButton.disabled = false;
-                this.restoreAllButton.textContent = 'Restore All';
-            }, 1000);
-        } catch (error) {
-            console.error('Failed to restore all tabs:', error);
-            this.restoreAllButton.disabled = false;
-            this.restoreAllButton.textContent = 'Restore All';
-        }
-    }
-    
-    async restoreAllTabsLite() {
-        try {
-            this.restoreAllLiteButton.disabled = true;
-            this.restoreAllLiteButton.textContent = 'Restoring...';
-            
-            await this.sendMessage({ 
-                action: 'restoreAllTabs', 
-                options: { forceMode: 'lite' }
-            });
-            
-            this.showRestorationStatus();
-            
-            setTimeout(() => {
-                this.loadTabList();
-                this.updateRestorationStatus();
-                this.restoreAllLiteButton.disabled = false;
-                this.restoreAllLiteButton.textContent = 'Restore (Lite)';
-            }, 1000);
-        } catch (error) {
-            console.error('Failed to restore all tabs in lite mode:', error);
-            this.restoreAllLiteButton.disabled = false;
-            this.restoreAllLiteButton.textContent = 'Restore (Lite)';
-        }
-    }
     
     
     async switchToTab(tabId) {
@@ -1231,20 +959,7 @@ class PopupManager {
                     this.showToast('Failed to focus group', 'error');
                 }
             });
-            const suspendBtn = document.createElement('button');
-            suspendBtn.className = 'secondary';
-            suspendBtn.textContent = 'Suspend Group';
-            suspendBtn.addEventListener('click', async () => {
-                try {
-                    await this.sendMessage({ action: 'suspendRelatedTabs', tabIds: group.tabIds.filter(id => !group.tabs.find(t => t.id === id)?.active) });
-                    this.showToast('Group suspended', 'success');
-                    setTimeout(() => this.loadTabList(), 500);
-                } catch (e) {
-                    this.showToast('Failed to suspend group', 'error');
-                }
-            });
             actions.appendChild(focusBtn);
-            actions.appendChild(suspendBtn);
             box.appendChild(actions);
             this.relationshipGroupsElement.appendChild(box);
         });
@@ -1694,135 +1409,6 @@ class PopupManager {
         }
     }
     
-    cycleRestorationMode() {
-        const modes = ['smart', 'lite', 'full'];
-        const currentIndex = modes.indexOf(this.currentRestorationMode);
-        const nextIndex = (currentIndex + 1) % modes.length;
-        this.currentRestorationMode = modes[nextIndex];
-        
-        this.updateRestorationModeUI();
-        this.showToast(`Restoration mode: ${this.currentRestorationMode}`, 'info');
-    }
-    
-    updateRestorationModeUI() {
-        if (!this.currentRestorationModeElement) return;
-        
-        // Update mode text and icon
-        this.currentRestorationModeElement.textContent = this.currentRestorationMode;
-        
-        const modeIcons = {
-            'smart': '🧠',  // brain
-            'lite': '⚡',   // lightning
-            'full': '🚀'    // rocket
-        };
-        
-        if (this.restorationModeIconElement) {
-            this.restorationModeIconElement.textContent = modeIcons[this.currentRestorationMode];
-        }
-        
-        // Update button titles
-        const descriptions = {
-            'smart': 'Smart mode - automatically chooses best restoration method',
-            'lite': 'Lite mode - always restore with memory optimization',
-            'full': 'Full mode - always restore without restrictions'
-        };
-        
-        if (this.toggleRestorationModeButton) {
-            this.toggleRestorationModeButton.title = descriptions[this.currentRestorationMode];
-        }
-    }
-    
-    updateRestorationStatsUI() {
-        if (!this.restorationStats || !this.restorationProgressElement) return;
-        
-        this.restorationProgressElement.textContent = 
-            `${this.restorationStats.totalRestored || 0}/${this.restorationStats.totalRestored || 0}`;
-        
-        if (this.liteRestorationsElement) {
-            this.liteRestorationsElement.textContent = this.restorationStats.liteRestorations || 0;
-        }
-    }
-    
-    showRestorationStatus() {
-        if (this.restorationStatusElement) {
-            this.restorationStatusElement.style.display = 'block';
-        }
-    }
-    
-    hideRestorationStatus() {
-        if (this.restorationStatusElement) {
-            this.restorationStatusElement.style.display = 'none';
-        }
-    }
-    
-    startRestorationMonitoring() {
-        // Update restoration status every 2 seconds during active operations
-        this.restorationUpdateInterval = setInterval(() => {
-            try {
-                if (this.restorationStats && this.restorationStats.activeRestorations > 0) {
-                    this.updateRestorationStatus().catch(error => {
-                        console.debug('Restoration status update failed:', error);
-                    });
-                }
-            } catch (error) {
-                console.debug('Restoration monitoring error:', error);
-            }
-        }, 2000);
-    }
-    
-    // Enhanced tab item creation to include restoration indicators
-    enhanceTabItemForRestoration(tabItem, tab) {
-        // Add restoration indicator
-        const indicator = document.createElement('div');
-        indicator.className = 'restoration-indicator';
-        tabItem.appendChild(indicator);
-        
-        // Check if tab is in lite mode (with proper error handling)
-        chrome.tabs.sendMessage(tab.id, { action: 'getLiteModeStatus' }, (response) => {
-            if (chrome.runtime.lastError) {
-                // Ignore connection errors for tabs without content script
-                console.debug('Tab', tab.id, 'does not have lite mode content script loaded');
-                return;
-            }
-            if (response && response.success && response.data.active) {
-                tabItem.classList.add('lite-mode');
-            }
-        });
-        
-        // Add restoration mode controls to tab actions
-        const tabActions = tabItem.querySelector('.tab-actions');
-        if (tabActions && (tab.suspended || tab.discarded)) {
-            // Replace simple restore with mode-aware restore
-            const existingRestore = tabActions.querySelector('button');
-            if (existingRestore && existingRestore.textContent === 'Restore') {
-                existingRestore.remove();
-                
-                // Add restore dropdown or multiple buttons based on space
-                const restoreBtn = document.createElement('button');
-                restoreBtn.textContent = 'Restore';
-                restoreBtn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    this.restoreTab(tab.id, this.currentRestorationMode === 'smart' ? null : this.currentRestorationMode);
-                });
-                
-                const liteBtn = document.createElement('button');
-                liteBtn.textContent = '⚡';
-                liteBtn.className = 'secondary';
-                liteBtn.title = 'Restore in lite mode';
-                liteBtn.style.fontSize = '10px';
-                liteBtn.style.padding = '2px 4px';
-                liteBtn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    this.restoreTab(tab.id, 'lite');
-                });
-                
-                tabActions.appendChild(restoreBtn);
-                tabActions.appendChild(liteBtn);
-            }
-        }
-        
-        return tabItem;
-    }
     
     async loadContextInfo() {
         try {
